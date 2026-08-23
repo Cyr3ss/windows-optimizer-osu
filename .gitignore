@@ -1,0 +1,9 @@
+# Windows / OS junk
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Logs
+*.log
+*.tmp
