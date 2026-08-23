@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
-    Applies system-level gaming latency tweaks: BCD timers, Windows Game Mode, DWM Fullscreen Exclusive mode, and Multimedia Gaming Profile.
+    Applies system-level gaming latency tweaks: BCD timers, Windows Game Mode, DWM Fullscreen Exclusive mode, Multimedia Gaming Profile, CPU Core Unparking, and Kernel RAM residency.
 #>
 
-Write-Host "=== [3/5] Системные таймеры, Game Mode и DWM Fullscreen ===" -ForegroundColor Cyan
+Write-Host "=== [3/5] Системные таймеры, Game Mode, DWM Fullscreen и ядро ===" -ForegroundColor Cyan
 
 # 1. BCD High-Precision Invariant Clock Tweaks
 Write-Host "[*] Настройка аппаратных таймеров Windows (BCD)..." -ForegroundColor Yellow
@@ -42,4 +42,23 @@ if (Test-Path $gamesTask) {
     Set-ItemProperty -Path $gamesTask -Name "GPU Priority" -Value 8 -Type DWord -Force -ErrorAction SilentlyContinue
 }
 
-Write-Host "=== Настройка системных таймеров и приоритетов завершена ===" -ForegroundColor Cyan
+# 4. CPU Core Unparking (Keep 100% of CPU cores active)
+Write-Host "[*] Разблокировка спящих ядер процессора (CPU Core Unparking)..." -ForegroundColor Yellow
+try {
+    powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR CPMINCORES 100 2>$null
+    powercfg -setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR CPMINCORES 100 2>$null
+    powercfg -setactive SCHEME_CURRENT 2>$null
+    Write-Host "  [+] Все логические ядра процессора активны (CPMINCORES 100%)." -ForegroundColor Green
+} catch {}
+
+# 5. Disable Power Throttling (EcoQoS) & Fast Startup
+Write-Host "[*] Отключение Power Throttling и Fast Startup (чистый запуск ядра)..." -ForegroundColor Yellow
+$pt = "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling"
+if (-not (Test-Path $pt)) { New-Item -Path $pt -Force | Out-Null }
+Set-ItemProperty -Path $pt -Name "PowerThrottlingOff" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+
+Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" -Name "HiberbootEnabled" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "DisablePagingExecutive" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+Write-Host "  [+] Ядро и драйверы зафиксированы в RAM, чистый старт ядра включен." -ForegroundColor Green
+
+Write-Host "=== Настройка системных таймеров и ядра завершена ===" -ForegroundColor Cyan
