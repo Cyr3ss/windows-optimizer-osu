@@ -13,13 +13,21 @@ Set-Service -Name "DiagTrack" -StartupType Disabled -ErrorAction SilentlyContinu
 Stop-Service -Name "SysMain" -Force -ErrorAction SilentlyContinue
 Set-Service -Name "SysMain" -StartupType Disabled -ErrorAction SilentlyContinue
 
-# 2. Set OEM / Secondary services to Manual
-$manualServices = @("HPAppHelperCap", "HPDiagsCap", "HPNetworkCap", "HPSysInfoCap", "AnyDesk", "WerSvc")
+# 2. Set OEM / Secondary services to Manual (including Wallpaper Engine, HP, AnyDesk, WerSvc)
+$manualServices = @(
+    "Wallpaper Engine Service",
+    "HPAppHelperCap",
+    "HPDiagsCap",
+    "HPNetworkCap",
+    "HPSysInfoCap",
+    "AnyDesk",
+    "WerSvc"
+)
 foreach ($s in $manualServices) {
     Stop-Service -Name $s -Force -ErrorAction SilentlyContinue
     Set-Service -Name $s -StartupType Manual -ErrorAction SilentlyContinue
 }
-Write-Host "  [+] Фоновые OEM и служебные процессы переведены в ручной режим." -ForegroundColor Green
+Write-Host "  [+] Фоновые OEM, Wallpaper Engine и служебные процессы переведены в ручной режим." -ForegroundColor Green
 
 # 3. Disable Heavy Scheduled Tasks
 Write-Host "[*] Отключение фоновых задач телеметрии и сканирования..." -ForegroundColor Yellow
