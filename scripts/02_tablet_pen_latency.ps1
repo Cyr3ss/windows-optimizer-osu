@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Eliminates graphics tablet and pen input latency by disabling Windows Ink gestures, press-and-hold delays, and USB power saving.
+    Eliminates graphics tablet and pen input latency by disabling Windows Ink gestures, press-and-hold delays, TabletInputService, and USB power saving.
 #>
 
 Write-Host "=== [2/5] Оптимизация задержек планшета и пера (Windows Ink / USB) ===" -ForegroundColor Cyan
@@ -24,7 +24,13 @@ Set-ItemProperty -Path $touch -Name "TouchModeN_HoldTime_Animation" -Value 0 -Ty
 
 Write-Host "  [+] Буферы задержки касания и жесты Flicks отключены." -ForegroundColor Green
 
-# 2. Disable USB Selective Suspend
+# 2. Disable TabletInputService (Touch Keyboard and Handwriting Panel Service)
+Write-Host "[*] Отключение службы сенсорной клавиатуры и рукописного ввода (TabletInputService)..." -ForegroundColor Yellow
+Stop-Service -Name "TabletInputService" -Force -ErrorAction SilentlyContinue
+Set-Service -Name "TabletInputService" -StartupType Disabled -ErrorAction SilentlyContinue
+Write-Host "  [+] TabletInputService остановлена и переведена в режим Disabled." -ForegroundColor Green
+
+# 3. Disable USB Selective Suspend
 Write-Host "[*] Отключение энергосбережения USB портов (Selective Suspend)..." -ForegroundColor Yellow
 try {
     powercfg /setacvalueindex SCHEME_CURRENT 2a737441-1930-4402-9177-b06418304ddf 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0 2>$null
@@ -33,7 +39,7 @@ try {
     Write-Host "  [+] USB Selective Suspend отключен." -ForegroundColor Green
 } catch {}
 
-# 3. Disable USB Hub Power Saving via WMI
+# 4. Disable USB Hub Power Saving via WMI
 Write-Host "[*] Отключение спящего режима USB-концентраторов..." -ForegroundColor Yellow
 try {
     Get-CimInstance MSPower_DeviceEnable -Namespace root\wmi -ErrorAction SilentlyContinue | ForEach-Object {
