@@ -27,8 +27,8 @@ Ideal for freshly installed Windows systems or new gaming PCs.
 ├── apply_all_tweaks.ps1               # Master runner (applies all safe tweaks in 1 click)
 ├── scripts/
 │   ├── 01_grub_efi_cleanup.ps1        # Purges GRUB/Linux from EFI partition & NVRAM
-│   ├── 02_tablet_pen_latency.ps1      # Eliminates tablet lag, Windows Ink & TabletInputService
-│   ├── 03_gaming_system_latency.ps1   # BCD timers, DWM Fullscreen, Game Mode, Core Unparking
+│   ├── 02_tablet_pen_latency.ps1      # Eliminates tablet input lag, Windows Ink & TabletInputService
+│   ├── 03_gaming_system_latency.ps1   # BCD timers, DWM Fullscreen, Game Mode, CPU Unparking
 │   ├── 04_network_ping_tweaks.ps1     # Low ping tweaks (disables Nagle's Algorithm)
 │   └── 05_debloat_services_tasks.ps1  # Debloats telemetry, SysMain, SSD LastAccess
 └── README.md                          # Bilingual documentation
@@ -38,23 +38,23 @@ Ideal for freshly installed Windows systems or new gaming PCs.
 
 1. **Eliminates USB Micro-Sleep Latency:**
    * Disables `USB Selective Suspend` and Root Hub power management, forcing the Deco 640 microcontroller to run at maximum steady polling rate.
-2. **Disables Windows Ink & Touch Subsystem:**
-   * `TabletInputService -> Disabled`: Completely stops the Touch Keyboard and Handwriting Panel Service that intercepts and delays pen strokes.
+2. **Disables Windows Ink Delay Buffers & TabletInputService:**
    * `HoldMode = 0`: Removes the artificial 300 ms hold-delay on pen tap.
    * `FlickMode = 0`: Disables gesture buffering.
    * `Splash = 0`: Removes visual ripple render overhead.
+   * **`TabletInputService = Disabled`**: Disables the background Touch Keyboard and Handwriting Panel service that intercepts pen coordinates.
 3. **OpenTabletDriver (OTD) Recommendations for Deco 640:**
    * Keep `DisablePressure: true` and `DisableTilt: true` to reduce packet processing overhead.
    * If you play **Hover** style, set `Tip Button -> None` in Bindings to prevent accidental micro-clicks on tablet tap.
-   * Optional: Use **Devocub Filter** (`Anticipate: 8-14 ms`) in OpenTabletDriver to compensate for the tablet's built-in hardware smoothing.
+   * Optional: Use **Devocub Filter** (`Anticipate: 8-12 ms`) to compensate for the tablet's built-in hardware smoothing.
 
 ### 🛠️ Script Details
 
 * **`01_grub_efi_cleanup.ps1`**: Mounts hidden EFI partition (`S:`), purges leftover Linux folders (`grub`, `loader`, `systemd`, `refind`, kernels), syncs fallback `BOOTX64.EFI` with Windows `bootmgfw.efi`, and deletes orphaned Linux entries from UEFI NVRAM.
-* **`02_tablet_pen_latency.ps1`**: Disables `TabletInputService`, optimizes Windows Pen & Touch subsystem, eliminates Press-and-Hold delays, and disables USB power saving.
-* **`03_gaming_system_latency.ps1`**: BCD invariant TSC clock (`disabledynamictick yes`, `useplatformclock no`), CPU Core Unparking (100%), DWM Fullscreen Exclusive mode (`HonorFSE`), and Windows Game Mode (`AutoGameModeEnabled = 1`).
+* **`02_tablet_pen_latency.ps1`**: Optimizes Windows Pen & Touch subsystem, disables `TabletInputService`, eliminates Press-and-Hold delays, and disables USB power saving.
+* **`03_gaming_system_latency.ps1`**: BCD invariant TSC clock (`disabledynamictick yes`, `useplatformclock no`), DWM Fullscreen Exclusive mode (`HonorFSE`), Windows Game Mode, CPU Core Unparking, and Kernel RAM residency.
 * **`04_network_ping_tweaks.ps1`**: Disables Nagle's Algorithm (`TCPNoDelay = 1`, `TcpAckFrequency = 1`) on all network adapters and disables P2P update seeding (`DODownloadMode = 0`).
-* **`05_debloat_services_tasks.ps1`**: Disables `DiagTrack`, `SysMain`, `TabletInputService`, sets OEM/AnyDesk services to Manual, disables telemetry scheduled tasks (`Compatibility Appraiser`), optimizes SSD access (`fsutil disablelastaccess 1`), and removes UI menu delays (`MenuShowDelay = 0`).
+* **`05_debloat_services_tasks.ps1`**: Disables `DiagTrack`, `SysMain`, sets OEM/AnyDesk services to Manual, disables telemetry scheduled tasks (`Compatibility Appraiser`), optimizes SSD access (`fsutil disablelastaccess 1`), and removes UI menu delays (`MenuShowDelay = 0`).
 
 ### 🎮 Recommended In-Game osu! Settings
 
@@ -90,7 +90,7 @@ Ideal for freshly installed Windows systems or new gaming PCs.
 ├── scripts/
 │   ├── 01_grub_efi_cleanup.ps1        # Удаление остатков GRUB / Linux из EFI и NVRAM
 │   ├── 02_tablet_pen_latency.ps1      # Устранение инпут-лага планшета, Windows Ink и TabletInputService
-│   ├── 03_gaming_system_latency.ps1   # BCD таймеры, DWM Fullscreen, Game Mode, разблокировка ядер CPU
+│   ├── 03_gaming_system_latency.ps1   # BCD таймеры, DWM Fullscreen, Game Mode, CPU Unparking
 │   ├── 04_network_ping_tweaks.ps1     # Снижение пинга (отключение Nagle's Algorithm)
 │   └── 05_debloat_services_tasks.ps1  # Отключение телеметрии, SysMain и тяжелых задач
 └── README.md                          # Двуязычная документация
@@ -100,23 +100,23 @@ Ideal for freshly installed Windows systems or new gaming PCs.
 
 1. **Устранение микро-задержек USB-контроллера:**
    * Отключение `USB Selective Suspend` и спящего режима USB-концентраторов исключает засыпание контроллера XP-Pen Deco 640.
-2. **Отключение службы сенсорного ввода и скрытых буферов Windows Ink:**
-   * `TabletInputService -> Disabled`: Полная остановка службы сенсорной клавиатуры и рукописного ввода, перехватывающей координаты пера.
+2. **Отключение скрытых буферов Windows Ink и службы рукописного ввода:**
    * `HoldMode = 0`: убирает 300 мс задержки при касании наконечником.
    * `FlickMode = 0`: убирает буфер распознавания жестов.
    * `Splash = 0`: убирает анимацию волн вокруг курсора.
+   * **`TabletInputService = Отключена`**: отключает фоновую службу сенсорной клавиатуры и рукописного ввода, перехватывающую координаты пера.
 3. **Рекомендации OpenTabletDriver (OTD) для Deco 640:**
    * Отключите обработку силы нажатия и наклона (`DisablePressure: true`, `DisableTilt: true`) для снижения нагрузки на обработку пакетов.
    * Для стиля игры **Hover** отключите `Tip Button -> None` в настройках Bindings, чтобы случайные касания поверхности не вызывали кликов мыши.
-   * При необходимости используйте плагин **Devocub Filter** (`Anticipate: 8-14 ms`) для компенсации заводского аппаратного сглаживания планшета.
+   * При необходимости используйте плагин **Devocub Filter** (`Anticipate: 8-12 ms`) для компенсации заводского аппаратного сглаживания планшета.
 
 ### 🛠️ Что делает каждый модуль
 
 * **`01_grub_efi_cleanup.ps1`**: Монтирует скрытый раздел EFI (`S:`), удаляет остатки Linux (`grub`, `loader`, `systemd`, `refind`, ядра), синхронизирует fallback `BOOTX64.EFI` с `bootmgfw.efi` и удаляет старые записи из памяти UEFI NVRAM.
-* **`02_tablet_pen_latency.ps1`**: Отключает службу `TabletInputService`, убирает задержки жестов, убирает задержку правого клика (Press-and-Hold) и отключает спящий режим USB.
-* **`03_gaming_system_latency.ps1`**: Настраивает BCD таймеры (`disabledynamictick yes`, `useplatformclock no`), разблокирует ядра процессора (CPU Core Unparking 100%), включает режим прямого вывода кадров (HonorFSE) и Windows Game Mode (`AutoGameModeEnabled = 1`).
+* **`02_tablet_pen_latency.ps1`**: Отключает `TabletInputService`, убирает задержки жестов, задержку правого клика (Press-and-Hold) и отключает спящий режим USB.
+* **`03_gaming_system_latency.ps1`**: Настраивает BCD таймеры (`disabledynamictick yes`, `useplatformclock no`), режим прямого вывода кадров (HonorFSE), Windows Game Mode (`AutoGameModeEnabled = 1`), CPU Core Unparking и фиксацию ядра в RAM.
 * **`04_network_ping_tweaks.ps1`**: Отключает алгоритм Нейгла (`TCPNoDelay = 1`, `TcpAckFrequency = 1`) на сетевых картах и отключает фоновую P2P-раздачу обновлений Windows (`DODownloadMode = 0`).
-* **`05_debloat_services_tasks.ps1`**: Отключает `DiagTrack`, `SysMain`, `TabletInputService`, переводит OEM/AnyDesk службы в ручной режим, отключает сканеры планировщика (`Compatibility Appraiser`), оптимизирует SSD (`fsutil disablelastaccess 1`) и убирает задержки меню (`MenuShowDelay = 0`).
+* **`05_debloat_services_tasks.ps1`**: Отключает `DiagTrack`, `SysMain`, переводит OEM/AnyDesk службы в ручной режим, отключает сканеры планировщика (`Compatibility Appraiser`), оптимизирует SSD (`fsutil disablelastaccess 1`) и убирает задержки меню (`MenuShowDelay = 0`).
 
 ### 🎮 Рекомендованные настройки osu!
 

@@ -24,11 +24,14 @@ Set-ItemProperty -Path $touch -Name "TouchModeN_HoldTime_Animation" -Value 0 -Ty
 
 Write-Host "  [+] Буферы задержки касания и жесты Flicks отключены." -ForegroundColor Green
 
-# 2. Disable TabletInputService (Touch Keyboard and Handwriting Panel Service)
-Write-Host "[*] Отключение службы сенсорной клавиатуры и рукописного ввода (TabletInputService)..." -ForegroundColor Yellow
-Stop-Service -Name "TabletInputService" -Force -ErrorAction SilentlyContinue
-Set-Service -Name "TabletInputService" -StartupType Disabled -ErrorAction SilentlyContinue
-Write-Host "  [+] TabletInputService остановлена и переведена в режим Disabled." -ForegroundColor Green
+# 2. Disable and Stop TabletInputService (Touch Keyboard and Handwriting Panel Service)
+Write-Host "[*] Отключение службы рукописного ввода и сенсорной клавиатуры (TabletInputService)..." -ForegroundColor Yellow
+try {
+    Stop-Service -Name "TabletInputService" -Force -ErrorAction SilentlyContinue
+    Set-Service -Name "TabletInputService" -StartupType Disabled -ErrorAction SilentlyContinue
+    & sc.exe config "TabletInputService" start= disabled 2>$null | Out-Null
+    Write-Host "  [+] TabletInputService отключена." -ForegroundColor Green
+} catch {}
 
 # 3. Disable USB Selective Suspend
 Write-Host "[*] Отключение энергосбережения USB портов (Selective Suspend)..." -ForegroundColor Yellow
