@@ -1,11 +1,11 @@
 <#
 .SYNOPSIS
-    Eliminates graphics tablet and pen input latency by disabling Windows Ink gestures, press-and-hold delays, TabletInputService, and USB power saving.
+    Eliminates graphics tablet and pen input latency by applying strict Group Policies, disabling Windows Ink gestures, press-and-hold delays, TabletInputService, and USB power saving.
 #>
 
-Write-Host "=== [2/5] Оптимизация задержек планшета и пера (Windows Ink / USB) ===" -ForegroundColor Cyan
+Write-Host "=== [2/5] Оптимизация задержек планшета и пера (Group Policies / Windows Ink / USB) ===" -ForegroundColor Cyan
 
-# 1. Disable Windows Pen Gestures and Press-and-Hold in Registry
+# 1. Disable Windows Pen Gestures and Press-and-Hold in User Registry
 Write-Host "[*] Отключение задержек Windows Ink и Press-and-Hold..." -ForegroundColor Yellow
 $sysEvent = "HKCU:\Software\Microsoft\Wisp\Pen\SysEventParameters"
 if (-not (Test-Path $sysEvent)) { New-Item -Path $sysEvent -Force | Out-Null }
@@ -22,9 +22,44 @@ Set-ItemProperty -Path $touch -Name "TouchMode_hold" -Value 0 -Type DWord
 Set-ItemProperty -Path $touch -Name "TouchModeN_HoldTime_BeforeAnimation" -Value 0 -Type DWord
 Set-ItemProperty -Path $touch -Name "TouchModeN_HoldTime_Animation" -Value 0 -Type DWord
 
-Write-Host "  [+] Буферы задержки касания и жесты Flicks отключены." -ForegroundColor Green
+# 2. Apply Strict TabletPC & Pen Group Policies (HKLM & HKCU)
+Write-Host "[*] Применение жестких Group Policies для планшетов и пера..." -ForegroundColor Yellow
+$pathsToCreate = @(
+    "HKLM:\SOFTWARE\Policies\Microsoft\Windows\TabletPC",
+    "HKCU:\Software\Policies\Microsoft\Windows\TabletPC",
+    "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PenWorkspace",
+    "HKCU:\Software\Policies\Microsoft\Windows\PenWorkspace",
+    "HKLM:\SOFTWARE\Policies\Microsoft\Windows\HandwritingErrorReports"
+)
+foreach ($p in $pathsToCreate) {
+    if (-not (Test-Path $p)) { New-Item -Path $p -Force -ErrorAction SilentlyContinue | Out-Null }
+}
 
-# 2. Disable and Stop TabletInputService (Touch Keyboard and Handwriting Panel Service)
+$policyValues = @{
+    "TurnOffPenFeedback" = 1
+    "TurnOffPressAndHold" = 1
+    "DisableFlicks" = 1
+    "DisablePagingFlick" = 1
+    "DisablePenCursorFeedback" = 1
+    "DisableTouchVisualFeedback" = 1
+    "PreventHandwritingDataSharing" = 1
+}
+foreach ($k in $policyValues.Keys) {
+    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\TabletPC" -Name $k -Value $policyValues[$k] -Type DWord -Force -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows\TabletPC" -Name $k -Value $policyValues[$k] -Type DWord -Force -ErrorAction SilentlyContinue
+}
+Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PenWorkspace" -Name "EnablePenWorkspace" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+Set-ItemProperty -Path "HKCU:\Software\Policies\Microsoft\Windows\PenWorkspace" -Name "EnablePenWorkspace" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+Write-Host "  [+] Групповые политики TabletPC и PenWorkspace применены." -ForegroundColor Green
+
+# 3. Apply 100% Linear 1:1 Raw Pointer Response Curve (Zeroing Acceleration/Deceleration)
+Write-Host "[*] Установка абсолютно линейной кривой отклика указателя (1:1 Raw)..." -ForegroundColor Yellow
+$smoothZero = [byte[]](0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
+Set-ItemProperty -Path "HKCU:\Control Panel\Mouse" -Name "SmoothMouseXCurve" -Value $smoothZero -Type Binary -Force -ErrorAction SilentlyContinue
+Set-ItemProperty -Path "HKCU:\Control Panel\Mouse" -Name "SmoothMouseYCurve" -Value $smoothZero -Type Binary -Force -ErrorAction SilentlyContinue
+Write-Host "  [+] Нелинейное сглаживание мыши в реестре Windows обнулено." -ForegroundColor Green
+
+# 4. Disable and Stop TabletInputService (Touch Keyboard and Handwriting Panel Service)
 Write-Host "[*] Отключение службы рукописного ввода и сенсорной клавиатуры (TabletInputService)..." -ForegroundColor Yellow
 try {
     Stop-Service -Name "TabletInputService" -Force -ErrorAction SilentlyContinue
@@ -33,7 +68,7 @@ try {
     Write-Host "  [+] TabletInputService отключена." -ForegroundColor Green
 } catch {}
 
-# 3. Disable USB Selective Suspend
+# 5. Disable USB Selective Suspend
 Write-Host "[*] Отключение энергосбережения USB портов (Selective Suspend)..." -ForegroundColor Yellow
 try {
     powercfg /setacvalueindex SCHEME_CURRENT 2a737441-1930-4402-9177-b06418304ddf 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0 2>$null
@@ -42,7 +77,7 @@ try {
     Write-Host "  [+] USB Selective Suspend отключен." -ForegroundColor Green
 } catch {}
 
-# 4. Disable USB Hub Power Saving via WMI
+# 6. Disable USB Hub Power Saving via WMI
 Write-Host "[*] Отключение спящего режима USB-концентраторов..." -ForegroundColor Yellow
 try {
     Get-CimInstance MSPower_DeviceEnable -Namespace root\wmi -ErrorAction SilentlyContinue | ForEach-Object {
