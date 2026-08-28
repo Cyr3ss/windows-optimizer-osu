@@ -2,7 +2,7 @@
 =============================================================================
  Windows Gaming & Tablet Optimizer (osu! Edition) - Python GUI Application
 =============================================================================
- Native Python 3 GUI application with dark theme, smart system scanner,
+ Native Python 3 GUI application with dark theme, accurate system scanner,
  granular tweak checkboxes, live console logger, and exception reporting.
  Compatible with PyInstaller for building standalone .exe files.
 =============================================================================
@@ -49,12 +49,9 @@ def is_admin() -> bool:
 def request_admin():
     if not is_admin():
         try:
-            # Re-launch current script/exe with Administrator privileges
             if getattr(sys, 'frozen', False):
-                # PyInstaller binary
                 ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, None, None, 1)
             else:
-                # Python script
                 ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, f'"{os.path.abspath(__file__)}"', None, 1)
             sys.exit(0)
         except Exception as e:
@@ -103,6 +100,24 @@ def reg_get_dword(root, subkey: str, name: str):
     except Exception:
         return None
 
+def reg_get_str(root, subkey: str, name: str):
+    try:
+        key = winreg.OpenKey(root, subkey, 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
+        val, _ = winreg.QueryValueEx(key, name)
+        winreg.CloseKey(key)
+        return str(val)
+    except Exception:
+        return None
+
+def reg_get_bin(root, subkey: str, name: str):
+    try:
+        key = winreg.OpenKey(root, subkey, 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
+        val, _ = winreg.QueryValueEx(key, name)
+        winreg.CloseKey(key)
+        return val
+    except Exception:
+        return None
+
 def run_cmd(cmd: str) -> bool:
     try:
         res = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -112,14 +127,16 @@ def run_cmd(cmd: str) -> bool:
         return False
 
 # ---------------------------------------------------------------------------
-# Optimizer Tweak Actions
+# Deep State Checking and Optimizer Engine
 # ---------------------------------------------------------------------------
 class TweaksEngine:
 
+    # 1. Pen Hold & Flick
     @staticmethod
     def check_pen_hold() -> str:
-        val = reg_get_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Wisp\Pen\SysEventParameters", "HoldMode")
-        return "Already Optimized" if val == 0 else "Available"
+        h_mode = reg_get_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Wisp\Pen\SysEventParameters", "HoldMode")
+        f_mode = reg_get_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Wisp\Pen\SysEventParameters", "FlickMode")
+        return "Already Optimized" if (h_mode == 0 and f_mode == 0) else "Available"
 
     @staticmethod
     def apply_pen_hold() -> bool:
@@ -131,6 +148,13 @@ class TweaksEngine:
         for k in ["TouchMode_hold", "TouchModeN_HoldTime_BeforeAnimation", "TouchModeN_HoldTime_Animation"]:
             reg_set_dword(r1, p2, k, 0)
         return True
+
+    # 2. Tablet GPO
+    @staticmethod
+    def check_tablet_gpo() -> str:
+        v1 = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Policies\Microsoft\Windows\TabletPC", "TurnOffPressAndHold")
+        v2 = reg_get_dword(winreg.HKEY_CURRENT_USER, r"Software\Policies\Microsoft\Windows\TabletPC", "TurnOffPressAndHold")
+        return "Already Applied" if (v1 == 1 or v2 == 1) else "Available"
 
     @staticmethod
     def apply_tablet_gpo() -> bool:
@@ -145,6 +169,14 @@ class TweaksEngine:
             reg_set_dword(root, r"SOFTWARE\Policies\Microsoft\Windows\PenWorkspace", "EnablePenWorkspace", 0)
         return True
 
+    # 3. Linear Curve (1:1 Raw)
+    @staticmethod
+    def check_linear_curve() -> str:
+        curve = reg_get_bin(winreg.HKEY_CURRENT_USER, r"Control Panel\Mouse", "SmoothMouseXCurve")
+        if curve and len(curve) >= 40 and all(b == 0 for b in curve[:40]):
+            return "Already Applied (1:1 Raw)"
+        return "Available"
+
     @staticmethod
     def apply_linear_curve() -> bool:
         zero_curve = bytes([0] * 40)
@@ -152,13 +184,15 @@ class TweaksEngine:
         reg_set_binary(winreg.HKEY_CURRENT_USER, r"Control Panel\Mouse", "SmoothMouseYCurve", zero_curve)
         return True
 
+    # 4. Tablet Input Service
     @staticmethod
     def check_tablet_service() -> str:
         try:
             res = subprocess.run("sc.exe qc TabletInputService", shell=True, capture_output=True, text=True)
-            if "DISABLED" in res.stdout.upper():
+            out = res.stdout.upper()
+            if "DISABLED" in out:
                 return "Already Disabled"
-            elif "TABLETINPUTSERVICE" in res.stdout.upper() or res.returncode == 0:
+            elif "TABLETINPUTSERVICE" in out or res.returncode == 0:
                 return "Detected (Active)"
             return "Not Found (N/A)"
         except Exception:
@@ -170,6 +204,17 @@ class TweaksEngine:
         run_cmd("sc.exe config TabletInputService start= disabled")
         return True
 
+    # 5. USB Selective Suspend
+    @staticmethod
+    def check_usb_suspend() -> str:
+        try:
+            res = subprocess.run("powercfg /query SCHEME_CURRENT 2a737441-1930-4402-9177-b06418304ddf 48e6b7a6-50f5-4782-a5d4-53bb8f07e226", shell=True, capture_output=True, text=True)
+            if "0x00000000" in res.stdout:
+                return "Already Disabled"
+            return "Available"
+        except Exception:
+            return "Available"
+
     @staticmethod
     def apply_usb_suspend() -> bool:
         run_cmd("powercfg /setacvalueindex SCHEME_CURRENT 2a737441-1930-4402-9177-b06418304ddf 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0")
@@ -179,11 +224,13 @@ class TweaksEngine:
         run_cmd(f'powershell.exe -NoProfile -Command "{ps_wmi}"')
         return True
 
+    # 6. BCD Timers (Invariant TSC)
     @staticmethod
     def check_bcd_timers() -> str:
         try:
             res = subprocess.run("bcdedit /enum {current}", shell=True, capture_output=True, text=True)
-            if "disabledynamictick" in res.stdout.lower() and "yes" in res.stdout.lower():
+            out = res.stdout.lower()
+            if "disabledynamictick" in out and "yes" in out:
                 return "Active (TSC)"
             return "Available"
         except Exception:
@@ -195,14 +242,26 @@ class TweaksEngine:
         run_cmd("bcdedit /set useplatformclock no")
         return True
 
+    # 7. Win32PrioritySeparation
     @staticmethod
     def check_win32_priority() -> str:
         val = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\PriorityControl", "Win32PrioritySeparation")
-        return "Active (0x26)" if val == 38 else "Available"
+        if val == 38 or val == 0x26:
+            return "Active (0x26)"
+        elif val is not None:
+            return f"Default (Current: {val})"
+        return "Available"
 
     @staticmethod
     def apply_win32_priority() -> bool:
         return reg_set_dword(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\PriorityControl", "Win32PrioritySeparation", 38)
+
+    # 8. CSRSS & DWM Priority
+    @staticmethod
+    def check_csrss_dwm() -> str:
+        c1 = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\csrss.exe\PerfOptions", "CpuPriorityClass")
+        d1 = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\dwm.exe\PerfOptions", "CpuPriorityClass")
+        return "Already Applied (High)" if (c1 == 3 and d1 == 3) else "Available"
 
     @staticmethod
     def apply_csrss_dwm() -> bool:
@@ -211,6 +270,13 @@ class TweaksEngine:
             reg_set_dword(winreg.HKEY_LOCAL_MACHINE, p, "CpuPriorityClass", 3)
             reg_set_dword(winreg.HKEY_LOCAL_MACHINE, p, "IoPriority", 3)
         return True
+
+    # 9. GameMode & PresenceWriter
+    @staticmethod
+    def check_gamemode() -> str:
+        gm = reg_get_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\GameBar", "AutoGameModeEnabled")
+        dvr = reg_get_dword(winreg.HKEY_CURRENT_USER, r"System\GameConfigStore", "GameDVR_Enabled")
+        return "Already Applied" if (gm == 1 and dvr == 0) else "Available"
 
     @staticmethod
     def apply_gamemode() -> bool:
@@ -222,6 +288,13 @@ class TweaksEngine:
         reg_set_dword(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.Gaming.GameBar.PresenceServer.Internal.PresenceWriter", "ActivationType", 0)
         return True
 
+    # 10. Keyboard Repeat Delay
+    @staticmethod
+    def check_keyboard_delay() -> str:
+        del_val = reg_get_str(winreg.HKEY_CURRENT_USER, r"Control Panel\Keyboard", "KeyboardDelay")
+        spd_val = reg_get_str(winreg.HKEY_CURRENT_USER, r"Control Panel\Keyboard", "KeyboardSpeed")
+        return "Already Applied (0 / 31)" if (del_val == "0" and spd_val == "31") else "Available"
+
     @staticmethod
     def apply_keyboard_delay() -> bool:
         reg_set_string(winreg.HKEY_CURRENT_USER, r"Control Panel\Keyboard", "KeyboardDelay", "0")
@@ -230,12 +303,30 @@ class TweaksEngine:
         reg_set_string(winreg.HKEY_CURRENT_USER, r"Control Panel\Accessibility\Keyboard Response", "BounceTime", "0")
         return True
 
+    # 11. CPU Unpark
+    @staticmethod
+    def check_cpu_unpark() -> str:
+        try:
+            res = subprocess.run("powercfg -query SCHEME_CURRENT SUB_PROCESSOR CPMINCORES", shell=True, capture_output=True, text=True)
+            if "0x00000064" in res.stdout or "100%" in res.stdout:
+                return "Already Applied (100%)"
+            return "Available"
+        except Exception:
+            return "Available"
+
     @staticmethod
     def apply_cpu_unpark() -> bool:
         run_cmd("powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR CPMINCORES 100")
         run_cmd("powercfg -setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR CPMINCORES 100")
         run_cmd("powercfg -setactive SCHEME_CURRENT")
         return True
+
+    # 12. Kernel RAM & Fast Startup
+    @staticmethod
+    def check_kernel_ram() -> str:
+        dpe = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management", "DisablePagingExecutive")
+        hb = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager\Power", "HiberbootEnabled")
+        return "Already Applied" if (dpe == 1 and hb == 0) else "Available"
 
     @staticmethod
     def apply_kernel_ram() -> bool:
@@ -244,6 +335,7 @@ class TweaksEngine:
         reg_set_dword(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management", "DisablePagingExecutive", 1)
         return True
 
+    # 13. Osu Fullscreen Exclusive
     @staticmethod
     def check_osu_fso() -> str:
         local_app = os.environ.get("LOCALAPPDATA", "")
@@ -252,7 +344,13 @@ class TweaksEngine:
             r"C:\osu!\osu!.exe", r"D:\osu!\osu!.exe", r"E:\osu!\osu!.exe"
         ]
         found = [p for p in paths if os.path.exists(p)]
-        return "Detected" if found else "osu! Not Found"
+        if not found:
+            return "osu! Not Found"
+        for p in found:
+            val = reg_get_str(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers", p)
+            if val and "DISABLEDXMAXIMIZEDWINDOWEDMODE" in val:
+                return "Already Applied"
+        return f"Detected ({len(found)} found)"
 
     @staticmethod
     def apply_osu_fso() -> bool:
@@ -267,6 +365,33 @@ class TweaksEngine:
                 reg_set_string(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers", p, "~ DISABLEDXMAXIMIZEDWINDOWEDMODE HIGHDPIAWARE")
                 applied = True
         return applied
+
+    # 14. Nagle's Algorithm
+    @staticmethod
+    def check_nagle() -> str:
+        try:
+            root_key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces")
+            idx = 0
+            applied_cnt = 0
+            total_cnt = 0
+            while True:
+                try:
+                    sub_name = winreg.EnumKey(root_key, idx)
+                    sub_path = rf"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\{sub_name}"
+                    v1 = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, sub_path, "TCPNoDelay")
+                    v2 = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, sub_path, "TcpAckFrequency")
+                    if v1 == 1 and v2 == 1:
+                        applied_cnt += 1
+                    total_cnt += 1
+                    idx += 1
+                except OSError:
+                    break
+            winreg.CloseKey(root_key)
+            if applied_cnt > 0:
+                return f"Already Applied ({applied_cnt}/{total_cnt})"
+            return f"Available ({total_cnt} adapters)"
+        except Exception:
+            return "Available"
 
     @staticmethod
     def apply_nagle() -> int:
@@ -290,9 +415,22 @@ class TweaksEngine:
             log_exception(e, "apply_nagle")
         return count
 
+    # 15. QoS Bandwidth
+    @staticmethod
+    def check_qos() -> str:
+        val = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Policies\Microsoft\Windows\Psched", "NonBestEffortLimit")
+        return "Already Applied (100%)" if val == 0 else "Available"
+
     @staticmethod
     def apply_qos() -> bool:
         return reg_set_dword(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Policies\Microsoft\Windows\Psched", "NonBestEffortLimit", 0)
+
+    # 16. Delivery Optimization
+    @staticmethod
+    def check_delivery_opt() -> str:
+        v1 = reg_get_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\DeliveryOptimization", "DODownloadMode")
+        v2 = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode")
+        return "Already Applied" if (v1 == 0 or v2 == 0) else "Available"
 
     @staticmethod
     def apply_delivery_opt() -> bool:
@@ -300,6 +438,7 @@ class TweaksEngine:
         reg_set_dword(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode", 0)
         return True
 
+    # 17. Telemetry & SysMain
     @staticmethod
     def check_telemetry() -> str:
         try:
@@ -319,6 +458,27 @@ class TweaksEngine:
             run_cmd(f"sc.exe config {s} start= disabled")
         return True
 
+    # 18. OEM Services
+    @staticmethod
+    def check_oem_services() -> str:
+        svcs = ["HPAppHelperCap", "HPDiagsCap", "HPNetworkCap", "HPSysInfoCap", "AnyDesk", "WerSvc"]
+        manual_cnt = 0
+        found_cnt = 0
+        for s in svcs:
+            try:
+                res = subprocess.run(f"sc.exe qc {s}", shell=True, capture_output=True, text=True)
+                if res.returncode == 0:
+                    found_cnt += 1
+                    if "DEMAND_START" in res.stdout.upper() or "DISABLED" in res.stdout.upper():
+                        manual_cnt += 1
+            except Exception:
+                pass
+        if found_cnt == 0:
+            return "None Found (Clean)"
+        if manual_cnt == found_cnt:
+            return f"Already Optimized ({manual_cnt}/{found_cnt})"
+        return f"Available ({manual_cnt}/{found_cnt} Manual)"
+
     @staticmethod
     def apply_oem_services() -> int:
         svcs = ["HPAppHelperCap", "HPDiagsCap", "HPNetworkCap", "HPSysInfoCap", "AnyDesk", "WerSvc"]
@@ -328,6 +488,17 @@ class TweaksEngine:
             if run_cmd(f"sc.exe config {s} start= demand"):
                 cnt += 1
         return cnt
+
+    # 19. Tasks Debloat
+    @staticmethod
+    def check_tasks_debloat() -> str:
+        try:
+            res = subprocess.run(r'schtasks /Query /TN "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser"', shell=True, capture_output=True, text=True)
+            if "Disabled" in res.stdout or "Отключено" in res.stdout:
+                return "Already Disabled"
+            return "Available (Active)"
+        except Exception:
+            return "Available"
 
     @staticmethod
     def apply_tasks_debloat() -> int:
@@ -346,9 +517,28 @@ class TweaksEngine:
                 cnt += 1
         return cnt
 
+    # 20. SSD LastAccess
+    @staticmethod
+    def check_ssd_last_access() -> str:
+        try:
+            res = subprocess.run("fsutil behavior query disablelastaccess", shell=True, capture_output=True, text=True)
+            out = res.stdout
+            if "1" in out or "2" in out or "3" in out:
+                return "Already Applied"
+            return "Available"
+        except Exception:
+            return "Available"
+
     @staticmethod
     def apply_ssd_last_access() -> bool:
         return run_cmd("fsutil behavior set disablelastaccess 1")
+
+    # 21. UI Delay
+    @staticmethod
+    def check_ui_delay() -> str:
+        v1 = reg_get_str(winreg.HKEY_CURRENT_USER, r"Control Panel\Desktop", "MenuShowDelay")
+        v2 = reg_get_str(winreg.HKEY_CURRENT_USER, r"Control Panel\Desktop\WindowMetrics", "MinAnimate")
+        return "Already Applied (0ms)" if (v1 == "0" and v2 == "0") else "Available"
 
     @staticmethod
     def apply_ui_delay() -> bool:
@@ -519,61 +709,112 @@ class OptimizerApp:
             v.set(False)
         self.log("Все чекбоксы сняты.", "yellow")
 
+    def format_badge(self, status: str) -> tuple:
+        if "Already" in status or "Active" in status:
+            return f"[ {status} ]", "#00E676"
+        elif "Detected" in status:
+            return f"[ {status} ]", "#FFD600"
+        elif "Not Found" in status or "None" in status or "N/A" in status:
+            return f"[ {status} ]", "#757575"
+        else:
+            return f"[ {status} ]", "#00E5FF"
+
     def scan_system(self):
         try:
             self.txt_log.delete("1.0", tk.END)
             self.log("=== Запуск предварительного сканирования системы ===", "cyan")
             self.lbl_status.config(text="Сканирование системы...")
-            self.prog_bar["value"] = 10
 
             # 1. Pen Hold
-            st_pen = TweaksEngine.check_pen_hold()
-            self.set_badge("status_PenHold", f"[ {st_pen} ]", "#00E676" if "Already" in st_pen else "#00E5FF")
+            t, c = self.format_badge(TweaksEngine.check_pen_hold())
+            self.set_badge("status_PenHold", t, c)
 
-            # 2. Tablet Service
-            st_tis = TweaksEngine.check_tablet_service()
-            self.set_badge("status_TabletInputSvc", f"[ {st_tis} ]", "#00E676" if "Already" in st_tis else "#FFD600" if "Detected" in st_tis else "#757575")
+            # 2. Tablet GPO
+            t, c = self.format_badge(TweaksEngine.check_tablet_gpo())
+            self.set_badge("status_TabletGPO", t, c)
 
-            self.set_badge("status_TabletGPO", "[ Доступно ]", "#00E5FF")
-            self.set_badge("status_LinearCurve", "[ Доступно ]", "#00E5FF")
-            self.set_badge("status_UsbSuspend", "[ Доступно ]", "#00E5FF")
-            self.prog_bar["value"] = 40
+            # 3. Linear Curve
+            t, c = self.format_badge(TweaksEngine.check_linear_curve())
+            self.set_badge("status_LinearCurve", t, c)
 
-            # 3. BCD Timers
-            st_bcd = TweaksEngine.check_bcd_timers()
-            self.set_badge("status_BcdTimers", f"[ {st_bcd} ]", "#00E676" if "Active" in st_bcd else "#00E5FF")
+            # 4. Tablet Service
+            t, c = self.format_badge(TweaksEngine.check_tablet_service())
+            self.set_badge("status_TabletInputSvc", t, c)
 
-            # 4. Win32Priority
-            st_prio = TweaksEngine.check_win32_priority()
-            self.set_badge("status_Win32Priority", f"[ {st_prio} ]", "#00E676" if "Active" in st_prio else "#00E5FF")
+            # 5. USB Suspend
+            t, c = self.format_badge(TweaksEngine.check_usb_suspend())
+            self.set_badge("status_UsbSuspend", t, c)
+            self.prog_bar["value"] = 25
 
-            self.set_badge("status_CsrssDwm", "[ Доступно ]", "#00E5FF")
-            self.set_badge("status_GameMode", "[ Доступно ]", "#00E5FF")
-            self.set_badge("status_KeyboardDelay", "[ Доступно ]", "#00E5FF")
-            self.set_badge("status_CpuUnpark", "[ Доступно ]", "#00E5FF")
-            self.set_badge("status_KernelRam", "[ Доступно ]", "#00E5FF")
+            # 6. BCD Timers
+            t, c = self.format_badge(TweaksEngine.check_bcd_timers())
+            self.set_badge("status_BcdTimers", t, c)
 
-            # 5. osu! FSO
-            st_osu = TweaksEngine.check_osu_fso()
-            self.set_badge("status_OsuFso", f"[ {st_osu} ]", "#00E676" if "Detected" in st_osu else "#757575")
-            self.prog_bar["value"] = 70
+            # 7. Win32Priority
+            t, c = self.format_badge(TweaksEngine.check_win32_priority())
+            self.set_badge("status_Win32Priority", t, c)
 
-            # 6. Network
-            self.set_badge("status_Nagle", "[ Доступно ]", "#00E5FF")
-            self.set_badge("status_QoS", "[ Доступно ]", "#00E5FF")
-            self.set_badge("status_DeliveryOpt", "[ Доступно ]", "#00E5FF")
+            # 8. CSRSS & DWM
+            t, c = self.format_badge(TweaksEngine.check_csrss_dwm())
+            self.set_badge("status_CsrssDwm", t, c)
 
-            # 7. Debloat
-            st_tele = TweaksEngine.check_telemetry()
-            self.set_badge("status_Telemetry", f"[ {st_tele} ]", "#00E676" if "Already" in st_tele else "#FFD600" if "Detected" in st_tele else "#757575")
-            self.set_badge("status_OemServices", "[ Доступно ]", "#00E5FF")
-            self.set_badge("status_TasksDebloat", "[ Доступно ]", "#00E5FF")
-            self.set_badge("status_SsdLastAccess", "[ Доступно ]", "#00E5FF")
-            self.set_badge("status_UiDelay", "[ Доступно ]", "#00E5FF")
+            # 9. GameMode
+            t, c = self.format_badge(TweaksEngine.check_gamemode())
+            self.set_badge("status_GameMode", t, c)
+
+            # 10. Keyboard Delay
+            t, c = self.format_badge(TweaksEngine.check_keyboard_delay())
+            self.set_badge("status_KeyboardDelay", t, c)
+
+            # 11. CPU Unpark
+            t, c = self.format_badge(TweaksEngine.check_cpu_unpark())
+            self.set_badge("status_CpuUnpark", t, c)
+
+            # 12. Kernel RAM
+            t, c = self.format_badge(TweaksEngine.check_kernel_ram())
+            self.set_badge("status_KernelRam", t, c)
+
+            # 13. osu! FSO
+            t, c = self.format_badge(TweaksEngine.check_osu_fso())
+            self.set_badge("status_OsuFso", t, c)
+            self.prog_bar["value"] = 65
+
+            # 14. Network Nagle
+            t, c = self.format_badge(TweaksEngine.check_nagle())
+            self.set_badge("status_Nagle", t, c)
+
+            # 15. QoS
+            t, c = self.format_badge(TweaksEngine.check_qos())
+            self.set_badge("status_QoS", t, c)
+
+            # 16. Delivery Opt
+            t, c = self.format_badge(TweaksEngine.check_delivery_opt())
+            self.set_badge("status_DeliveryOpt", t, c)
+            self.prog_bar["value"] = 80
+
+            # 17. Telemetry
+            t, c = self.format_badge(TweaksEngine.check_telemetry())
+            self.set_badge("status_Telemetry", t, c)
+
+            # 18. OEM Services
+            t, c = self.format_badge(TweaksEngine.check_oem_services())
+            self.set_badge("status_OemServices", t, c)
+
+            # 19. Tasks Debloat
+            t, c = self.format_badge(TweaksEngine.check_tasks_debloat())
+            self.set_badge("status_TasksDebloat", t, c)
+
+            # 20. SSD LastAccess
+            t, c = self.format_badge(TweaksEngine.check_ssd_last_access())
+            self.set_badge("status_SsdLastAccess", t, c)
+
+            # 21. UI Delay
+            t, c = self.format_badge(TweaksEngine.check_ui_delay())
+            self.set_badge("status_UiDelay", t, c)
 
             self.prog_bar["value"] = 100
             self.lbl_status.config(text="Сканирование завершено!")
-            self.log("[V] Сканирование успешно завершено. Все модули проверены.", "green")
+            self.log("[V] Сканирование успешно завершено. Состояние всех 21 модулей проверено.", "green")
         except Exception as e:
             log_exception(e, "scan_system")
             self.log(f"[!] Ошибка сканирования: {e}", "red")
@@ -591,91 +832,91 @@ class OptimizerApp:
             # 1. Pen Hold
             if self.chk_vars["chk_PenHold"].get():
                 TweaksEngine.apply_pen_hold()
-                self.set_badge("status_PenHold", "[ Применено OK ]", "#00E676")
+                self.set_badge("status_PenHold", "[ Already Applied ]", "#00E676")
                 self.log("[OK] Windows Ink HoldMode и FlickMode отключены.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 2. Tablet GPO
             if self.chk_vars["chk_TabletGPO"].get():
                 TweaksEngine.apply_tablet_gpo()
-                self.set_badge("status_TabletGPO", "[ Применено OK ]", "#00E676")
+                self.set_badge("status_TabletGPO", "[ Already Applied ]", "#00E676")
                 self.log("[OK] Group Policies TabletPC и PenWorkspace применены.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 3. Linear Curve
             if self.chk_vars["chk_LinearCurve"].get():
                 TweaksEngine.apply_linear_curve()
-                self.set_badge("status_LinearCurve", "[ Применено OK ]", "#00E676")
+                self.set_badge("status_LinearCurve", "[ Already Applied (1:1 Raw) ]", "#00E676")
                 self.log("[OK] Нелинейное сглаживание курсора обнулено (1:1 Raw).")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 4. Tablet Service
             if self.chk_vars["chk_TabletInputSvc"].get():
                 TweaksEngine.apply_tablet_service()
-                self.set_badge("status_TabletInputSvc", "[ Применено OK ]", "#00E676")
+                self.set_badge("status_TabletInputSvc", "[ Already Disabled ]", "#00E676")
                 self.log("[OK] TabletInputService отключена.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 5. USB Suspend
             if self.chk_vars["chk_UsbSuspend"].get():
                 TweaksEngine.apply_usb_suspend()
-                self.set_badge("status_UsbSuspend", "[ Применено OK ]", "#00E676")
+                self.set_badge("status_UsbSuspend", "[ Already Disabled ]", "#00E676")
                 self.log("[OK] USB Selective Suspend и спящий режим Root Hubs отключены.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 6. BCD Timers
             if self.chk_vars["chk_BcdTimers"].get():
                 TweaksEngine.apply_bcd_timers()
-                self.set_badge("status_BcdTimers", "[ Применено OK ]", "#00E676")
+                self.set_badge("status_BcdTimers", "[ Active (TSC) ]", "#00E676")
                 self.log("[OK] BCD таймеры: disabledynamictick yes / useplatformclock no.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 7. Win32Priority
             if self.chk_vars["chk_Win32Priority"].get():
                 TweaksEngine.apply_win32_priority()
-                self.set_badge("status_Win32Priority", "[ Применено OK ]", "#00E676")
+                self.set_badge("status_Win32Priority", "[ Active (0x26) ]", "#00E676")
                 self.log("[OK] Win32PrioritySeparation = 0x26 (38) выставлен.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 8. CSRSS & DWM
             if self.chk_vars["chk_CsrssDwm"].get():
                 TweaksEngine.apply_csrss_dwm()
-                self.set_badge("status_CsrssDwm", "[ Применено OK ]", "#00E676")
+                self.set_badge("status_CsrssDwm", "[ Already Applied (High) ]", "#00E676")
                 self.log("[OK] CSRSS и DWM переведены в High Priority.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 9. GameMode
             if self.chk_vars["chk_GameMode"].get():
                 TweaksEngine.apply_gamemode()
-                self.set_badge("status_GameMode", "[ Применено OK ]", "#00E676")
+                self.set_badge("status_GameMode", "[ Already Applied ]", "#00E676")
                 self.log("[OK] Game Mode включен, GameDVR / PresenceWriter отключены.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 10. Keyboard Delay
             if self.chk_vars["chk_KeyboardDelay"].get():
                 TweaksEngine.apply_keyboard_delay()
-                self.set_badge("status_KeyboardDelay", "[ Применено OK ]", "#00E676")
+                self.set_badge("status_KeyboardDelay", "[ Already Applied (0 / 31) ]", "#00E676")
                 self.log("[OK] KeyboardDelay = 0 / Speed = 31 выставлены.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 11. CPU Unpark
             if self.chk_vars["chk_CpuUnpark"].get():
                 TweaksEngine.apply_cpu_unpark()
-                self.set_badge("status_CpuUnpark", "[ Применено OK ]", "#00E676")
+                self.set_badge("status_CpuUnpark", "[ Already Applied (100%) ]", "#00E676")
                 self.log("[OK] CPU Core Unparking (100% активных ядер) включен.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 12. Kernel RAM
             if self.chk_vars["chk_KernelRam"].get():
                 TweaksEngine.apply_kernel_ram()
-                self.set_badge("status_KernelRam", "[ Применено OK ]", "#00E676")
+                self.set_badge("status_KernelRam", "[ Already Applied ]", "#00E676")
                 self.log("[OK] Ядро зафиксировано в RAM, Fast Startup отключен.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 13. Osu FSO
             if self.chk_vars["chk_OsuFso"].get():
                 if TweaksEngine.apply_osu_fso():
-                    self.set_badge("status_OsuFso", "[ Применено OK ]", "#00E676")
+                    self.set_badge("status_OsuFso", "[ Already Applied ]", "#00E676")
                     self.log("[OK] Hardware Exclusive Fullscreen настроен для osu!.exe")
                 else:
                     self.set_badge("status_OsuFso", "[ Пропущено (N/A) ]", "#757575")
@@ -685,56 +926,56 @@ class OptimizerApp:
             # 14. Nagle
             if self.chk_vars["chk_Nagle"].get():
                 cnt = TweaksEngine.apply_nagle()
-                self.set_badge("status_Nagle", f"[ Применено ({cnt}) ]", "#00E676")
+                self.set_badge("status_Nagle", f"[ Already Applied ({cnt}) ]", "#00E676")
                 self.log(f"[OK] Алгоритм Нейгла отключен на {cnt} интерфейсах.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 15. QoS
             if self.chk_vars["chk_QoS"].get():
                 TweaksEngine.apply_qos()
-                self.set_badge("status_QoS", "[ Применено OK ]", "#00E676")
+                self.set_badge("status_QoS", "[ Already Applied (100%) ]", "#00E676")
                 self.log("[OK] 100% QoS канала разблокировано.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 16. Delivery Opt
             if self.chk_vars["chk_DeliveryOpt"].get():
                 TweaksEngine.apply_delivery_opt()
-                self.set_badge("status_DeliveryOpt", "[ Применено OK ]", "#00E676")
+                self.set_badge("status_DeliveryOpt", "[ Already Applied ]", "#00E676")
                 self.log("[OK] Delivery Optimization P2P отключена.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 17. Telemetry
             if self.chk_vars["chk_Telemetry"].get():
                 TweaksEngine.apply_telemetry()
-                self.set_badge("status_Telemetry", "[ Применено OK ]", "#00E676")
+                self.set_badge("status_Telemetry", "[ Already Disabled ]", "#00E676")
                 self.log("[OK] DiagTrack и SysMain отключены.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 18. OEM Services
             if self.chk_vars["chk_OemServices"].get():
                 cnt = TweaksEngine.apply_oem_services()
-                self.set_badge("status_OemServices", f"[ Переведено ({cnt}) ]", "#00E676")
+                self.set_badge("status_OemServices", f"[ Already Optimized ({cnt}) ]", "#00E676")
                 self.log(f"[OK] OEM службы ({cnt} шт.) переведены в ручной режим.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 19. Tasks Debloat
             if self.chk_vars["chk_TasksDebloat"].get():
                 cnt = TweaksEngine.apply_tasks_debloat()
-                self.set_badge("status_TasksDebloat", f"[ Отключено ({cnt}) ]", "#00E676")
+                self.set_badge("status_TasksDebloat", f"[ Already Disabled ({cnt}) ]", "#00E676")
                 self.log(f"[OK] Отключено {cnt} тяжелых задач планировщика.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 20. SSD LastAccess
             if self.chk_vars["chk_SsdLastAccess"].get():
                 TweaksEngine.apply_ssd_last_access()
-                self.set_badge("status_SsdLastAccess", "[ Применено OK ]", "#00E676")
+                self.set_badge("status_SsdLastAccess", "[ Already Applied ]", "#00E676")
                 self.log("[OK] DisableLastAccess = 1 для SSD применен.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 21. UI Delay
             if self.chk_vars["chk_UiDelay"].get():
                 TweaksEngine.apply_ui_delay()
-                self.set_badge("status_UiDelay", "[ Применено OK ]", "#00E676")
+                self.set_badge("status_UiDelay", "[ Already Applied (0ms) ]", "#00E676")
                 self.log("[OK] Задержка интерфейса MenuShowDelay = 0 установлена.")
             step += 1; self.prog_bar["value"] = 100
 
@@ -751,9 +992,7 @@ class OptimizerApp:
 # Application Entry Point
 # ---------------------------------------------------------------------------
 def main():
-    # Require Administrator privileges
     request_admin()
-
     root = tk.Tk()
     app = OptimizerApp(root)
     root.mainloop()
