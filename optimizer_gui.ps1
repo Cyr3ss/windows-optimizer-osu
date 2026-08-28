@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Windows Gaming & Tablet Optimizer - Interactive GUI App
 #>
@@ -24,12 +24,14 @@ $stack
     try {
         [System.IO.File]::AppendAllText($global:ErrorLogPath, $errEntry, [System.Text.Encoding]::UTF8)
     } catch {}
+    Write-Host "[ERROR in $context]: $msg" -ForegroundColor Red
 }
 
+# Auto-elevate to Administrator if run directly
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     try {
-        Start-Process powershell.exe -ArgumentList ("-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"") -Verb RunAs
-        exit
+        Start-Process powershell.exe -ArgumentList ("-NoProfile -STA -ExecutionPolicy Bypass -File `"$PSCommandPath`"") -Verb RunAs
+        exit 0
     } catch {
         Log-Exception $_ "UAC Elevation"
         exit 1
@@ -257,7 +259,7 @@ try {
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnEnvironment Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
                                     <CheckBox Name="chk_CsrssDwm" Content="Boost Input Server (CSRSS) and Compositor (DWM) Priorities" IsChecked="True" FontWeight="SemiBold"/>
@@ -512,7 +514,6 @@ function Add-Log($text, $color = "#00E676") {
     $timestamp = Get-Date -Format "HH:mm:ss"
     $txtLog.AppendText("[$timestamp] $text`r`n")
     $txtLog.ScrollToEnd()
-    [System.Windows.Forms.Application]::DoEvents()
 }
 
 function Set-Badge($badgeName, $text, $colorHex) {
