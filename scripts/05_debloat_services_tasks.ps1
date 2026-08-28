@@ -1,17 +1,17 @@
 <#
 .SYNOPSIS
-    Disables background telemetry, SysMain, TabletInputService, heavy diagnostic scheduled tasks, enables NTFS SSD optimizations, and removes UI delays.
+    Disables background telemetry, SysMain, heavy diagnostic scheduled tasks, enables NTFS SSD optimizations, and removes UI delays.
 #>
 
 Write-Host "=== [5/5] Деблоатинг фоновых служб, оптимизация SSD и интерфейса ===" -ForegroundColor Cyan
 
-# 1. Disable Windows Telemetry, SysMain, and TabletInputService
-Write-Host "[*] Отключение DiagTrack, SysMain и TabletInputService..." -ForegroundColor Yellow
-$disabledServices = @("DiagTrack", "SysMain", "TabletInputService")
-foreach ($d in $disabledServices) {
-    Stop-Service -Name $d -Force -ErrorAction SilentlyContinue
-    Set-Service -Name $d -StartupType Disabled -ErrorAction SilentlyContinue
-}
+# 1. Disable Windows Telemetry & SysMain
+Write-Host "[*] Отключение DiagTrack и SysMain..." -ForegroundColor Yellow
+Stop-Service -Name "DiagTrack" -Force -ErrorAction SilentlyContinue
+Set-Service -Name "DiagTrack" -StartupType Disabled -ErrorAction SilentlyContinue
+
+Stop-Service -Name "SysMain" -Force -ErrorAction SilentlyContinue
+Set-Service -Name "SysMain" -StartupType Disabled -ErrorAction SilentlyContinue
 
 # 2. Set OEM / Secondary services to Manual
 $manualServices = @("HPAppHelperCap", "HPDiagsCap", "HPNetworkCap", "HPSysInfoCap", "AnyDesk", "WerSvc")
@@ -19,7 +19,7 @@ foreach ($s in $manualServices) {
     Stop-Service -Name $s -Force -ErrorAction SilentlyContinue
     Set-Service -Name $s -StartupType Manual -ErrorAction SilentlyContinue
 }
-Write-Host "  [+] Фоновые OEM и служебные процессы переведены в ручной режим/Disabled." -ForegroundColor Green
+Write-Host "  [+] Фоновые OEM и служебные процессы переведены в ручной режим." -ForegroundColor Green
 
 # 3. Disable Heavy Scheduled Tasks
 Write-Host "[*] Отключение фоновых задач телеметрии и сканирования..." -ForegroundColor Yellow

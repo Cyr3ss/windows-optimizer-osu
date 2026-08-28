@@ -113,4 +113,19 @@ Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\P
 Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "DisablePagingExecutive" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
 Write-Host "  [+] Ядро и драйверы зафиксированы в RAM, чистый старт ядра включен." -ForegroundColor Green
 
+# 9. Force Hardware Exclusive Fullscreen for osu! (Dynamic path discovery)
+$possibleOsu = @(
+    "$env:LOCALAPPDATA\osu!\osu!.exe",
+    "C:\osu!\osu!.exe",
+    "D:\osu!\osu!.exe",
+    "E:\osu!\osu!.exe"
+)
+$appCompat = "HKCU:\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"
+if (-not (Test-Path $appCompat)) { New-Item -Path $appCompat -Force | Out-Null }
+foreach ($p in $possibleOsu) {
+    if (Test-Path $p) {
+        Set-ItemProperty -Path $appCompat -Name $p -Value "~ DISABLEDXMAXIMIZEDWINDOWEDMODE HIGHDPIAWARE" -Force -ErrorAction SilentlyContinue
+    }
+}
+
 Write-Host "=== Настройка системных таймеров, квантов CPU и ядра завершена ===" -ForegroundColor Cyan

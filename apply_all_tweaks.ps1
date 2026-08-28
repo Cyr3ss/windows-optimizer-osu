@@ -1,22 +1,27 @@
 <#
 .SYNOPSIS
-    Master runner script to apply all Windows Gaming & Tablet Latency optimizations in one click.
+    Универсальный мастер-скрипт применения всех оптимизаций Windows & графического планшета в 1 клик.
+    Автоматически запрашивает права Администратора при запуске на любом компьютере.
 #>
+
+# Автоматический перезапуск с правами Администратора при необходимости
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host "[*] Запрос прав Администратора (UAC)..." -ForegroundColor Yellow
+    try {
+        Start-Process powershell.exe -ArgumentList ("-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"") -Verb RunAs
+        exit
+    } catch {
+        Write-Host "[!] Не удалось автоматически повысить права. Пожалуйста, запустите PowerShell от имени Администратора." -ForegroundColor Red
+        Pause
+        exit 1
+    }
+}
 
 Clear-Host
 Write-Host "=================================================================" -ForegroundColor Magenta
-Write-Host "   Windows Gaming & Tablet Latency Optimizer (osu! Edition)     " -ForegroundColor Magenta
+Write-Host "   Windows Gaming & Tablet Latency Optimizer (Universal Edition) " -ForegroundColor Magenta
 Write-Host "=================================================================" -ForegroundColor Magenta
 Write-Host ""
-
-# Check Administrator
-if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Host "[!] ВНИМАНИЕ: Скрипт не запущен с правами Администратора!" -ForegroundColor Red
-    Write-Host "    Пожалуйста, перезапустите PowerShell от имени Администратора." -ForegroundColor Yellow
-    Write-Host ""
-    Pause
-    exit 1
-}
 
 $scriptDir = $PSScriptRoot
 if (-not $scriptDir) { $scriptDir = "." }
@@ -39,7 +44,9 @@ foreach ($s in $scripts) {
 
 Write-Host ""
 Write-Host "=================================================================" -ForegroundColor Green
-Write-Host "   [V] Все оптимизации успешно применены!                        " -ForegroundColor Green
+Write-Host "   [V] Все оптимизации успешно применены ко всей системе!         " -ForegroundColor Green
 Write-Host "=================================================================" -ForegroundColor Green
-Write-Host "Рекомендуется перезагрузить компьютер для полного вступления всех настроек в силу." -ForegroundColor Cyan
+Write-Host "Рекомендуется перезагрузить компьютер для применения параметров BCD и ядра." -ForegroundColor Cyan
 Write-Host ""
+Write-Host "Нажмите любую клавишу для выхода..."
+[void][System.Console]::ReadKey($true)
