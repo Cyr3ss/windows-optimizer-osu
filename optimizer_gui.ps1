@@ -2,16 +2,50 @@
 .SYNOPSIS
     Windows Gaming & Tablet Optimizer - Interactive GUI App
     Нативное приложение на WPF (XAML) с предварительным сканированием модулей,
-    выбором твиков через чекбоксы и живым цветным журналом выполнения.
+    выбором твиков через чекбоксы, живым цветным журналом и записью исключений в optimizer_error.log.
 #>
+
+$scriptDir = $PSScriptRoot
+if (-not $scriptDir) { $scriptDir = (Get-Location).Path }
+$global:ErrorLogPath = Join-Path $scriptDir "optimizer_error.log"
+
+# Функция логирования исключений в отдельный файл
+function Log-Exception($ex, $context = "General") {
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $msg = if ($ex.Message) { $ex.Message } else { "$ex" }
+    $stack = if ($ex.StackTrace) { $ex.StackTrace } else { (Get-PSCallStack | Out-String) }
+    
+    $errEntry = @"
+=================================================================
+[$timestamp] ИСКЛЮЧЕНИЕ В БЛОКЕ: [$context]
+Сообщение: $msg
+Стек вызовов:
+$stack
+=================================================================
+
+"@
+    try {
+        Add-Content -Path $global:ErrorLogPath -Value $errEntry -Encoding UTF8 -Force
+    } catch {}
+}
 
 # Автоматическое повышение прав Администратора
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Start-Process powershell.exe -ArgumentList ("-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"") -Verb RunAs
-    exit
+    try {
+        Start-Process powershell.exe -ArgumentList ("-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"") -Verb RunAs
+        exit
+    } catch {
+        Log-Exception $_ "UAC Elevation"
+        exit 1
+    }
 }
 
-Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
+try {
+    Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
+} catch {
+    Log-Exception $_ "Assembly Loading"
+    throw $_
+}
 
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -461,8 +495,13 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 </Window>
 "@
 
-$reader = (New-Object System.Xml.XmlNodeReader $xaml)
-$window = [Windows.Markup.XamlReader]::Load($reader)
+try {
+    $reader = (New-Object System.Xml.XmlNodeReader $xaml)
+    $window = [Windows.Markup.XamlReader]::Load($reader)
+} catch {
+    Log-Exception $_ "XAML Parsing / Window Load"
+    throw $_
+}
 
 # Связывание элементов интерфейса
 $btnScan = $window.FindName("btnScan")
@@ -493,90 +532,95 @@ function Set-Badge($badgeName, $text, $colorHex) {
 
 # 1. Сканирование системы (Smart Pre-Check)
 $btnScan.Add_Click({
-    $txtLog.Clear()
-    Add-Log "=== Запуск предварительного сканирования системы ==="
-    $lblStatusText.Text = "Сканирование..."
-    $prgBar.Value = 10
+    try {
+        $txtLog.Clear()
+        Add-Log "=== Запуск предварительного сканирования системы ==="
+        $lblStatusText.Text = "Сканирование..."
+        $prgBar.Value = 10
 
-    # Планшет & Перо
-    $sysEvent = Get-ItemProperty "HKCU:\Software\Microsoft\Wisp\Pen\SysEventParameters" -ErrorAction SilentlyContinue
-    if ($sysEvent -and $sysEvent.HoldMode -eq 0) {
-        Set-Badge "status_PenHold" "[ Уже оптимизировано ]" "#00E676"
-    } else {
-        Set-Badge "status_PenHold" "[ Доступно ]" "#00E5FF"
-    }
-    
-    $tis = Get-Service -Name "TabletInputService" -ErrorAction SilentlyContinue
-    if ($tis) {
-        if ($tis.StartType -eq "Disabled") {
-            Set-Badge "status_TabletInputSvc" "[ Уже отключена ]" "#00E676"
+        # Планшет & Перо
+        $sysEvent = Get-ItemProperty "HKCU:\Software\Microsoft\Wisp\Pen\SysEventParameters" -ErrorAction SilentlyContinue
+        if ($sysEvent -and $sysEvent.HoldMode -eq 0) {
+            Set-Badge "status_PenHold" "[ Уже оптимизировано ]" "#00E676"
         } else {
-            Set-Badge "status_TabletInputSvc" "[ Обнаружена (Активна) ]" "#FFD600"
+            Set-Badge "status_PenHold" "[ Доступно ]" "#00E5FF"
         }
-    } else {
-        Set-Badge "status_TabletInputSvc" "[ Не найдена (N/A) ]" "#757575"
+        
+        $tis = Get-Service -Name "TabletInputService" -ErrorAction SilentlyContinue
+        if ($tis) {
+            if ($tis.StartType -eq "Disabled") {
+                Set-Badge "status_TabletInputSvc" "[ Уже отключена ]" "#00E676"
+            } else {
+                Set-Badge "status_TabletInputSvc" "[ Обнаружена (Активна) ]" "#FFD600"
+            }
+        } else {
+            Set-Badge "status_TabletInputSvc" "[ Не найдена (N/A) ]" "#757575"
+        }
+
+        Set-Badge "status_TabletGPO" "[ Доступно ]" "#00E5FF"
+        Set-Badge "status_LinearCurve" "[ Доступно ]" "#00E5FF"
+        Set-Badge "status_UsbSuspend" "[ Доступно ]" "#00E5FF"
+        $prgBar.Value = 40
+
+        # Система & Таймеры
+        $bcdDyn = bcdedit /enum "{current}" 2>$null | Select-String "disabledynamictick\s+Yes"
+        if ($bcdDyn) {
+            Set-Badge "status_BcdTimers" "[ Уже активно (TSC) ]" "#00E676"
+        } else {
+            Set-Badge "status_BcdTimers" "[ Доступно ]" "#00E5FF"
+        }
+
+        $prio = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -ErrorAction SilentlyContinue).Win32PrioritySeparation
+        if ($prio -eq 38) {
+            Set-Badge "status_Win32Priority" "[ Уже активно (0x26) ]" "#00E676"
+        } else {
+            Set-Badge "status_Win32Priority" "[ Доступно ]" "#00E5FF"
+        }
+
+        Set-Badge "status_CsrssDwm" "[ Доступно ]" "#00E5FF"
+        Set-Badge "status_GameMode" "[ Доступно ]" "#00E5FF"
+        Set-Badge "status_KeyboardDelay" "[ Доступно ]" "#00E5FF"
+        Set-Badge "status_CpuUnpark" "[ Доступно ]" "#00E5FF"
+        Set-Badge "status_KernelRam" "[ Доступно ]" "#00E5FF"
+
+        $possibleOsu = @("$env:LOCALAPPDATA\osu!\osu!.exe", "C:\osu!\osu!.exe", "D:\osu!\osu!.exe", "E:\osu!\osu!.exe")
+        $foundOsu = $possibleOsu | Where-Object { Test-Path $_ } | Select-Object -First 1
+        if ($foundOsu) {
+            Set-Badge "status_OsuFso" "[ Найдена: $foundOsu ]" "#00E676"
+        } else {
+            Set-Badge "status_OsuFso" "[ osu! не найдена ]" "#757575"
+        }
+        $prgBar.Value = 70
+
+        # Сеть
+        $interfaces = Get-ChildItem "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces" -ErrorAction SilentlyContinue
+        if ($interfaces) {
+            Set-Badge "status_Nagle" "[ Найдено $($interfaces.Count) интерфейсов ]" "#00E5FF"
+        } else {
+            Set-Badge "status_Nagle" "[ N/A ]" "#757575"
+        }
+        Set-Badge "status_QoS" "[ Доступно ]" "#00E5FF"
+        Set-Badge "status_DeliveryOpt" "[ Доступно ]" "#00E5FF"
+
+        # Службы & SSD
+        $diag = Get-Service -Name "DiagTrack" -ErrorAction SilentlyContinue
+        if ($diag -and $diag.StartType -eq "Disabled") {
+            Set-Badge "status_Telemetry" "[ Уже отключена ]" "#00E676"
+        } else {
+            Set-Badge "status_Telemetry" "[ Обнаружена ]" "#FFD600"
+        }
+        Set-Badge "status_OemServices" "[ Доступно ]" "#00E5FF"
+        Set-Badge "status_TasksDebloat" "[ Доступно ]" "#00E5FF"
+        Set-Badge "status_SsdLastAccess" "[ Доступно ]" "#00E5FF"
+        Set-Badge "status_UiDelay" "[ Доступно ]" "#00E5FF"
+
+        $prgBar.Value = 100
+        $lblStatusText.Text = "Сканирование завершено!"
+        Add-Log "[V] Сканирование успешно завершено. Все доступные модули обнаружены."
+    } catch {
+        Log-Exception $_ "btnScan_Click"
+        Add-Log "[!] Ошибка при сканировании системы. Подробности в optimizer_error.log" "#FF5252"
     }
-
-    Set-Badge "status_TabletGPO" "[ Доступно ]" "#00E5FF"
-    Set-Badge "status_LinearCurve" "[ Доступно ]" "#00E5FF"
-    Set-Badge "status_UsbSuspend" "[ Доступно ]" "#00E5FF"
-    $prgBar.Value = 40
-
-    # Система & Таймеры
-    $bcdDyn = bcdedit /enum "{current}" | Select-String "disabledynamictick\s+Yes"
-    if ($bcdDyn) {
-        Set-Badge "status_BcdTimers" "[ Уже активно (TSC) ]" "#00E676"
-    } else {
-        Set-Badge "status_BcdTimers" "[ Доступно ]" "#00E5FF"
-    }
-
-    $prio = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -ErrorAction SilentlyContinue).Win32PrioritySeparation
-    if ($prio -eq 38) {
-        Set-Badge "status_Win32Priority" "[ Уже активно (0x26) ]" "#00E676"
-    } else {
-        Set-Badge "status_Win32Priority" "[ Доступно ]" "#00E5FF"
-    }
-
-    Set-Badge "status_CsrssDwm" "[ Доступно ]" "#00E5FF"
-    Set-Badge "status_GameMode" "[ Доступно ]" "#00E5FF"
-    Set-Badge "status_KeyboardDelay" "[ Доступно ]" "#00E5FF"
-    Set-Badge "status_CpuUnpark" "[ Доступно ]" "#00E5FF"
-    Set-Badge "status_KernelRam" "[ Доступно ]" "#00E5FF"
-
-    $possibleOsu = @("$env:LOCALAPPDATA\osu!\osu!.exe", "C:\osu!\osu!.exe", "D:\osu!\osu!.exe", "E:\osu!\osu!.exe")
-    $foundOsu = $possibleOsu | Where-Object { Test-Path $_ } | Select-Object -First 1
-    if ($foundOsu) {
-        Set-Badge "status_OsuFso" "[ Найдена: $foundOsu ]" "#00E676"
-    } else {
-        Set-Badge "status_OsuFso" "[ osu! не найдена ]" "#757575"
-    }
-    $prgBar.Value = 70
-
-    # Сеть
-    $interfaces = Get-ChildItem "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces" -ErrorAction SilentlyContinue
-    if ($interfaces) {
-        Set-Badge "status_Nagle" "[ Найдено $($interfaces.Count) интерфейсов ]" "#00E5FF"
-    } else {
-        Set-Badge "status_Nagle" "[ N/A ]" "#757575"
-    }
-    Set-Badge "status_QoS" "[ Доступно ]" "#00E5FF"
-    Set-Badge "status_DeliveryOpt" "[ Доступно ]" "#00E5FF"
-
-    # Службы & SSD
-    $diag = Get-Service -Name "DiagTrack" -ErrorAction SilentlyContinue
-    if ($diag -and $diag.StartType -eq "Disabled") {
-        Set-Badge "status_Telemetry" "[ Уже отключена ]" "#00E676"
-    } else {
-        Set-Badge "status_Telemetry" "[ Обнаружена ]" "#FFD600"
-    }
-    Set-Badge "status_OemServices" "[ Доступно ]" "#00E5FF"
-    Set-Badge "status_TasksDebloat" "[ Доступно ]" "#00E5FF"
-    Set-Badge "status_SsdLastAccess" "[ Доступно ]" "#00E5FF"
-    Set-Badge "status_UiDelay" "[ Доступно ]" "#00E5FF"
-
-    $prgBar.Value = 100
-    $lblStatusText.Text = "Сканирование завершено!"
-    Add-Log "[V] Сканирование успешно завершено. Все доступные модули обнаружены."
 })
 
 # Кнопки Выбрать все / Снять все
@@ -633,6 +677,7 @@ $btnApply.Add_Click({
             Set-Badge "status_PenHold" "[ Применено Успешно ]" "#00E676"
             Add-Log "[OK] Windows Ink HoldMode и FlickMode отключены."
         } catch {
+            Log-Exception $_ "chk_PenHold"
             Set-Badge "status_PenHold" "[ Ошибка ]" "#FF5252"
             Add-Log "[FAIL] Ошибка Windows Ink: $_"
         }
@@ -667,6 +712,7 @@ $btnApply.Add_Click({
             Set-Badge "status_TabletGPO" "[ Применено Успешно ]" "#00E676"
             Add-Log "[OK] Group Policies для TabletPC и PenWorkspace применены."
         } catch {
+            Log-Exception $_ "chk_TabletGPO"
             Set-Badge "status_TabletGPO" "[ Ошибка ]" "#FF5252"
             Add-Log "[FAIL] Ошибка Group Policies: $_"
         }
@@ -682,6 +728,7 @@ $btnApply.Add_Click({
             Set-Badge "status_LinearCurve" "[ Применено Успешно ]" "#00E676"
             Add-Log "[OK] Нелинейное сглаживание курсора обнулено (1:1 Raw)."
         } catch {
+            Log-Exception $_ "chk_LinearCurve"
             Set-Badge "status_LinearCurve" "[ Ошибка ]" "#FF5252"
             Add-Log "[FAIL] Ошибка MouseCurve: $_"
         }
@@ -699,6 +746,7 @@ $btnApply.Add_Click({
                 Set-Badge "status_TabletInputSvc" "[ Применено Успешно ]" "#00E676"
                 Add-Log "[OK] TabletInputService отключена."
             } catch {
+                Log-Exception $_ "chk_TabletInputSvc"
                 Set-Badge "status_TabletInputSvc" "[ Ошибка прав ]" "#FFD600"
                 Add-Log "[WARN] Ошибка остановки TabletInputService: $_"
             }
@@ -719,6 +767,7 @@ $btnApply.Add_Click({
             Set-Badge "status_UsbSuspend" "[ Применено Успешно ]" "#00E676"
             Add-Log "[OK] USB Selective Suspend и спящий режим Hubs отключены."
         } catch {
+            Log-Exception $_ "chk_UsbSuspend"
             Set-Badge "status_UsbSuspend" "[ Частично ]" "#FFD600"
             Add-Log "[WARN] USB Suspend настроен частично: $_"
         }
@@ -733,6 +782,7 @@ $btnApply.Add_Click({
             Set-Badge "status_BcdTimers" "[ Применено Успешно ]" "#00E676"
             Add-Log "[OK] BCD таймеры: disabledynamictick yes / useplatformclock no."
         } catch {
+            Log-Exception $_ "chk_BcdTimers"
             Set-Badge "status_BcdTimers" "[ Ошибка ]" "#FF5252"
             Add-Log "[FAIL] BCD ошибка: $_"
         }
@@ -746,6 +796,7 @@ $btnApply.Add_Click({
             Set-Badge "status_Win32Priority" "[ Применено Успешно ]" "#00E676"
             Add-Log "[OK] Win32PrioritySeparation = 0x26 (38) выставлен."
         } catch {
+            Log-Exception $_ "chk_Win32Priority"
             Set-Badge "status_Win32Priority" "[ Ошибка ]" "#FF5252"
             Add-Log "[FAIL] Ошибка Win32Priority: $_"
         }
@@ -767,6 +818,7 @@ $btnApply.Add_Click({
             Set-Badge "status_CsrssDwm" "[ Применено Успешно ]" "#00E676"
             Add-Log "[OK] CSRSS и DWM переведены в High Priority."
         } catch {
+            Log-Exception $_ "chk_CsrssDwm"
             Set-Badge "status_CsrssDwm" "[ Ошибка ]" "#FF5252"
             Add-Log "[FAIL] Ошибка PerfOptions: $_"
         }
@@ -793,6 +845,7 @@ $btnApply.Add_Click({
             Set-Badge "status_GameMode" "[ Применено Успешно ]" "#00E676"
             Add-Log "[OK] Game Mode включен, GameDVR и PresenceWriter отключены."
         } catch {
+            Log-Exception $_ "chk_GameMode"
             Set-Badge "status_GameMode" "[ Ошибка ]" "#FF5252"
             Add-Log "[FAIL] Ошибка GameMode: $_"
         }
@@ -812,6 +865,7 @@ $btnApply.Add_Click({
             Set-Badge "status_KeyboardDelay" "[ Применено Успешно ]" "#00E676"
             Add-Log "[OK] KeyboardDelay = 0 / Speed = 31 выставлены."
         } catch {
+            Log-Exception $_ "chk_KeyboardDelay"
             Set-Badge "status_KeyboardDelay" "[ Ошибка ]" "#FF5252"
             Add-Log "[FAIL] Ошибка клавиатуры: $_"
         }
@@ -827,6 +881,7 @@ $btnApply.Add_Click({
             Set-Badge "status_CpuUnpark" "[ Применено Успешно ]" "#00E676"
             Add-Log "[OK] CPU Core Unparking (100% активных ядер) включен."
         } catch {
+            Log-Exception $_ "chk_CpuUnpark"
             Set-Badge "status_CpuUnpark" "[ Ошибка ]" "#FFD600"
             Add-Log "[WARN] Ошибка CPU Unparking: $_"
         }
@@ -844,6 +899,7 @@ $btnApply.Add_Click({
             Set-Badge "status_KernelRam" "[ Применено Успешно ]" "#00E676"
             Add-Log "[OK] Ядро зафиксировано в RAM, Fast Startup отключен."
         } catch {
+            Log-Exception $_ "chk_KernelRam"
             Set-Badge "status_KernelRam" "[ Ошибка ]" "#FF5252"
             Add-Log "[FAIL] Ошибка ядра: $_"
         }
@@ -852,21 +908,25 @@ $btnApply.Add_Click({
 
     # 13. Osu FSO
     if ($window.FindName("chk_OsuFso").IsChecked) {
-        $possibleOsu = @("$env:LOCALAPPDATA\osu!\osu!.exe", "C:\osu!\osu!.exe", "D:\osu!\osu!.exe", "E:\osu!\osu!.exe")
-        $appCompat = "HKCU:\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"
-        if (-not (Test-Path $appCompat)) { New-Item -Path $appCompat -Force | Out-Null }
-        $applied = $false
-        foreach ($p in $possibleOsu) {
-            if (Test-Path $p) {
-                Set-ItemProperty -Path $appCompat -Name $p -Value "~ DISABLEDXMAXIMIZEDWINDOWEDMODE HIGHDPIAWARE" -Force -ErrorAction SilentlyContinue
-                Add-Log "[OK] Fullscreen Exclusive настроен для: $p"
-                $applied = $true
+        try {
+            $possibleOsu = @("$env:LOCALAPPDATA\osu!\osu!.exe", "C:\osu!\osu!.exe", "D:\osu!\osu!.exe", "E:\osu!\osu!.exe")
+            $appCompat = "HKCU:\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"
+            if (-not (Test-Path $appCompat)) { New-Item -Path $appCompat -Force | Out-Null }
+            $applied = $false
+            foreach ($p in $possibleOsu) {
+                if (Test-Path $p) {
+                    Set-ItemProperty -Path $appCompat -Name $p -Value "~ DISABLEDXMAXIMIZEDWINDOWEDMODE HIGHDPIAWARE" -Force -ErrorAction SilentlyContinue
+                    Add-Log "[OK] Fullscreen Exclusive настроен для: $p"
+                    $applied = $true
+                }
             }
-        }
-        if ($applied) {
-            Set-Badge "status_OsuFso" "[ Применено Успешно ]" "#00E676"
-        } else {
-            Set-Badge "status_OsuFso" "[ Пропущено (N/A) ]" "#757575"
+            if ($applied) {
+                Set-Badge "status_OsuFso" "[ Применено Успешно ]" "#00E676"
+            } else {
+                Set-Badge "status_OsuFso" "[ Пропущено (N/A) ]" "#757575"
+            }
+        } catch {
+            Log-Exception $_ "chk_OsuFso"
         }
     }
     $current++; $prgBar.Value = [math]::Round(($current / $totalChecks) * 100)
@@ -885,6 +945,7 @@ $btnApply.Add_Click({
             Set-Badge "status_Nagle" "[ Применено ($cnt адаптеров) ]" "#00E676"
             Add-Log "[OK] Алгоритм Нейгла отключен на $cnt интерфейсах."
         } catch {
+            Log-Exception $_ "chk_Nagle"
             Set-Badge "status_Nagle" "[ Ошибка ]" "#FF5252"
             Add-Log "[FAIL] Ошибка TCPNoDelay: $_"
         }
@@ -900,6 +961,7 @@ $btnApply.Add_Click({
             Set-Badge "status_QoS" "[ Применено Успешно ]" "#00E676"
             Add-Log "[OK] 100% QoS канала разблокировано."
         } catch {
+            Log-Exception $_ "chk_QoS"
             Set-Badge "status_QoS" "[ Ошибка ]" "#FF5252"
             Add-Log "[FAIL] Ошибка QoS: $_"
         }
@@ -919,6 +981,7 @@ $btnApply.Add_Click({
             Set-Badge "status_DeliveryOpt" "[ Применено Успешно ]" "#00E676"
             Add-Log "[OK] Delivery Optimization P2P отключена."
         } catch {
+            Log-Exception $_ "chk_DeliveryOpt"
             Set-Badge "status_DeliveryOpt" "[ Ошибка ]" "#FF5252"
             Add-Log "[FAIL] Ошибка Delivery Optimization: $_"
         }
@@ -927,61 +990,73 @@ $btnApply.Add_Click({
 
     # 17. Telemetry & SysMain
     if ($window.FindName("chk_Telemetry").IsChecked) {
-        @("DiagTrack", "SysMain") | ForEach-Object {
-            $s = $_
-            $svc = Get-Service -Name $s -ErrorAction SilentlyContinue
-            if ($svc) {
-                Stop-Service -Name $s -Force -ErrorAction SilentlyContinue
-                Set-Service -Name $s -StartupType Disabled -ErrorAction SilentlyContinue
-                Add-Log "[OK] Служба $s отключена."
+        try {
+            @("DiagTrack", "SysMain") | ForEach-Object {
+                $s = $_
+                $svc = Get-Service -Name $s -ErrorAction SilentlyContinue
+                if ($svc) {
+                    Stop-Service -Name $s -Force -ErrorAction SilentlyContinue
+                    Set-Service -Name $s -StartupType Disabled -ErrorAction SilentlyContinue
+                    Add-Log "[OK] Служба $s отключена."
+                }
             }
+            Set-Badge "status_Telemetry" "[ Применено Успешно ]" "#00E676"
+        } catch {
+            Log-Exception $_ "chk_Telemetry"
         }
-        Set-Badge "status_Telemetry" "[ Применено Успешно ]" "#00E676"
     }
     $current++; $prgBar.Value = [math]::Round(($current / $totalChecks) * 100)
 
     # 18. OEM Services
     if ($window.FindName("chk_OemServices").IsChecked) {
-        $manualServices = @("HPAppHelperCap", "HPDiagsCap", "HPNetworkCap", "HPSysInfoCap", "AnyDesk", "WerSvc")
-        $fnd = 0
-        foreach ($s in $manualServices) {
-            $svc = Get-Service -Name $s -ErrorAction SilentlyContinue
-            if ($svc) {
-                Stop-Service -Name $s -Force -ErrorAction SilentlyContinue
-                Set-Service -Name $s -StartupType Manual -ErrorAction SilentlyContinue
-                $fnd++
+        try {
+            $manualServices = @("HPAppHelperCap", "HPDiagsCap", "HPNetworkCap", "HPSysInfoCap", "AnyDesk", "WerSvc")
+            $fnd = 0
+            foreach ($s in $manualServices) {
+                $svc = Get-Service -Name $s -ErrorAction SilentlyContinue
+                if ($svc) {
+                    Stop-Service -Name $s -Force -ErrorAction SilentlyContinue
+                    Set-Service -Name $s -StartupType Manual -ErrorAction SilentlyContinue
+                    $fnd++
+                }
             }
+            Set-Badge "status_OemServices" "[ Переведено: $fnd ]" "#00E676"
+            Add-Log "[OK] OEM службы ($fnd шт.) переведены в ручной режим."
+        } catch {
+            Log-Exception $_ "chk_OemServices"
         }
-        Set-Badge "status_OemServices" "[ Переведено: $fnd ]" "#00E676"
-        Add-Log "[OK] OEM службы ($fnd шт.) переведены в ручной режим."
     }
     $current++; $prgBar.Value = [math]::Round(($current / $totalChecks) * 100)
 
     # 19. Tasks Debloat
     if ($window.FindName("chk_TasksDebloat").IsChecked) {
-        $tasks = @(
-            "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
-            "\Microsoft\Windows\Application Experience\ProgramDataUpdater",
-            "\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
-            "\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip",
-            "\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticDataCollector",
-            "\Microsoft\Windows\Power Efficiency Diagnostics\AnalyzeSystem",
-            "\Microsoft\Windows\Windows Error Reporting\QueueReporting"
-        )
-        $tCount = 0
-        foreach ($t in $tasks) {
-            try {
-                $taskName = $t.Split('\')[-1]
-                $taskPath = $t.Substring(0, $t.LastIndexOf('\')+1)
-                $chk = Get-ScheduledTask -TaskName $taskName -TaskPath $taskPath -ErrorAction SilentlyContinue
-                if ($chk) {
-                    Disable-ScheduledTask -TaskName $taskName -TaskPath $taskPath -ErrorAction SilentlyContinue | Out-Null
-                    $tCount++
-                }
-            } catch {}
+        try {
+            $tasks = @(
+                "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
+                "\Microsoft\Windows\Application Experience\ProgramDataUpdater",
+                "\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
+                "\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip",
+                "\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticDataCollector",
+                "\Microsoft\Windows\Power Efficiency Diagnostics\AnalyzeSystem",
+                "\Microsoft\Windows\Windows Error Reporting\QueueReporting"
+            )
+            $tCount = 0
+            foreach ($t in $tasks) {
+                try {
+                    $taskName = $t.Split('\')[-1]
+                    $taskPath = $t.Substring(0, $t.LastIndexOf('\')+1)
+                    $chk = Get-ScheduledTask -TaskName $taskName -TaskPath $taskPath -ErrorAction SilentlyContinue
+                    if ($chk) {
+                        Disable-ScheduledTask -TaskName $taskName -TaskPath $taskPath -ErrorAction SilentlyContinue | Out-Null
+                        $tCount++
+                    }
+                } catch {}
+            }
+            Set-Badge "status_TasksDebloat" "[ Отключено ($tCount) ]" "#00E676"
+            Add-Log "[OK] Отключено $tCount тяжелых фоновых задач планировщика."
+        } catch {
+            Log-Exception $_ "chk_TasksDebloat"
         }
-        Set-Badge "status_TasksDebloat" "[ Отключено ($tCount) ]" "#00E676"
-        Add-Log "[OK] Отключено $tCount тяжелых фоновых задач планировщика."
     }
     $current++; $prgBar.Value = [math]::Round(($current / $totalChecks) * 100)
 
@@ -992,6 +1067,7 @@ $btnApply.Add_Click({
             Set-Badge "status_SsdLastAccess" "[ Применено Успешно ]" "#00E676"
             Add-Log "[OK] DisableLastAccess = 1 для SSD применен."
         } catch {
+            Log-Exception $_ "chk_SsdLastAccess"
             Set-Badge "status_SsdLastAccess" "[ Ошибка ]" "#FFD600"
             Add-Log "[WARN] Ошибка fsutil: $_"
         }
@@ -1008,6 +1084,7 @@ $btnApply.Add_Click({
             Set-Badge "status_UiDelay" "[ Применено Успешно ]" "#00E676"
             Add-Log "[OK] Задержка интерфейса MenuShowDelay = 0 установлена."
         } catch {
+            Log-Exception $_ "chk_UiDelay"
             Set-Badge "status_UiDelay" "[ Ошибка ]" "#FF5252"
             Add-Log "[FAIL] Ошибка UI delay: $_"
         }
@@ -1020,8 +1097,17 @@ $btnApply.Add_Click({
 
 # Запуск сканирования при старте окна
 $window.Add_ContentRendered({
-    $btnScan.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)))
+    try {
+        $btnScan.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)))
+    } catch {
+        Log-Exception $_ "Add_ContentRendered AutoScan"
+    }
 })
 
 # Отображение окна
-$window.ShowDialog() | Out-Null
+try {
+    $window.ShowDialog() | Out-Null
+} catch {
+    Log-Exception $_ "Window ShowDialog"
+    throw $_
+}
