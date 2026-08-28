@@ -8,61 +8,77 @@
 <a name="-english"></a>
 ## 🇬🇧 English
 
-An automated, universal PowerShell optimization toolkit designed to eliminate input lag, tune graphics tablets (**XP-Pen Deco 640 / OpenTabletDriver / Wacom / Huion / Gaomon**), optimize system timers, improve network responsiveness, and safely debloat background Windows telemetry.
+An interactive, universal Windows 10/11 desktop optimization suite and CLI toolkit designed to eliminate input lag, tune graphics tablets (**XP-Pen Deco 640 / OpenTabletDriver / Wacom / Huion / Gaomon**), optimize system timers, improve network responsiveness, and safely debloat background Windows telemetry.
 
-Works out-of-the-box on any Windows 10/11 PC with visual real-time status reporting (`[  OK  ]`, `[ WARN ]`, `[ FAIL ]`).
+### ✨ Key Features
 
-### ⚡ Quick Start (One-Click Setup)
+1. **🖥️ Interactive Dark WPF GUI (`launch_gui.bat` / `optimizer_gui.ps1`):**
+   * **Smart Pre-Scan Engine**: Automatically scans the system before applying anything to verify whether specific services, hardware controllers, or game executables actually exist on your PC.
+   * **Individual Checkboxes**: Toggle individual tweaks per category (Tablet & Pen, System & FPS, Network & Ping, Debloat & SSD).
+   * **Visual Status Badges**: Displays real-time status (`[ Detected ]`, `[ Already Active ]`, `[ Applied OK ]`, `[ Not Applicable ]`).
+   * **Live Console Logger & Progress Bar**: Clean color-coded logging of all actions.
+2. **⚡ 1-Click Console CLI (`apply_all_tweaks.ps1`):**
+   * Automated batch runner with auto-UAC escalation and summary report (`[ OK ]`, `[ WARN ]`, `[ FAIL ]`).
 
-1. Open **PowerShell as Administrator** (`Win + X` -> **Terminal (Admin)** or **PowerShell (Admin)**).
-2. Navigate to the directory and run:
-   ```powershell
-   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-   .\apply_all_tweaks.ps1
-   ```
+### ⚡ Quick Start
+
+#### Option A: Interactive GUI (Recommended)
+Double-click **`launch_gui.bat`** (or run `powershell -File optimizer_gui.ps1`).
+
+#### Option B: 1-Click PowerShell CLI
+Run in elevated PowerShell:
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\apply_all_tweaks.ps1
+```
 
 ### 📂 Repository Structure
 
 ```text
-├── apply_all_tweaks.ps1               # Master runner (Auto-UAC + Real-time visual report)
+├── launch_gui.bat                     # 1-Click GUI Launcher (Auto-Admin)
+├── optimizer_gui.ps1                  # Interactive WPF GUI Application
+├── apply_all_tweaks.ps1               # Automated CLI Runner (All tweaks in 1-click)
 ├── scripts/
-│   ├── 01_tablet_pen_latency.ps1      # Eliminates tablet lag, Windows Ink & TabletInputService
+│   ├── 01_tablet_pen_latency.ps1      # Tablet lag, Windows Ink & TabletInputService
 │   ├── 02_gaming_system_latency.ps1   # BCD timers, Win32Priority 0x26, CSRSS/DWM, Game Mode
 │   ├── 03_network_ping_tweaks.ps1     # Low ping tweaks (disables Nagle's Algorithm & QoS reserve)
 │   └── 04_debloat_services_tasks.ps1  # Debloats telemetry, SysMain, SSD LastAccess
 └── README.md                          # Bilingual documentation
 ```
 
-### 📊 Diagnostic Status Indicators
-
-During execution, each tweak provides clear visual feedback:
-* `[  OK  ]` **Green**: Feature/tweak applied completely and successfully.
-* `[ WARN ]` **Yellow**: Optional tweak skipped (e.g., service/OEM app not installed on this machine).
-* `[ FAIL ]` **Red**: Action failed due to insufficient permissions or system lock.
-
 ---
 
 <a name="-русский"></a>
 ## 🇷🇺 Русский
 
-Универсальный набор скриптов автоматической настройки Windows, оптимизации графических планшетов (**XP-Pen Deco 640 / OpenTabletDriver / Wacom / Huion / Gaomon**), устранения задержек ввода (Input Lag), оптимизации сети и безопасного деблоатинга фоновых служб.
+Интерактивное графическое приложение и консольный набор скриптов для настройки Windows, оптимизации графических планшетов (**XP-Pen Deco 640 / OpenTabletDriver / Wacom / Huion / Gaomon**), устранения задержек ввода (Input Lag), оптимизации сети и безопасного деблоатинга фоновых служб.
 
-Работает на любом компьютере с Windows 10/11 и выводит наглядный статус каждого действия (`[  OK  ]`, `[ WARN ]`, `[ FAIL ]`).
+### ✨ Возможности:
 
-### ⚡ Быстрый старт (В один клик)
+1. **🖥️ Интерактивный Dark GUI интерфейс (`launch_gui.bat` / `optimizer_gui.ps1`):**
+   * **Умное предварительное сканирование (Smart Pre-Check):** Перед внесением изменений программа проверяет, существует ли служба, поддерживается ли WMI-метод, найден ли путь к игре или сетевому интерфейсу на данном ПК, и отображает статус бейджем (`[ Обнаружено ]`, `[ Уже включено ]`, `[ Не применимо ]`).
+   * **Покнопочный выбор:** Включение и отключение любых конкретных твиков через чекбоксы по категориям (*Планшет и Перо*, *Система и FPS*, *Сеть и Пинг*, *Службы и SSD*).
+   * **Живой журнал логов и шкала прогресса:** Наглядный цветной вывод каждого действия.
+2. **⚡ Консольный запуск в 1 клик (`apply_all_tweaks.ps1`):**
+   * Автоматический мастер-скрипт с автоповышением прав UAC и итоговой таблицей отчета (`[ OK ]`, `[ WARN ]`, `[ FAIL ]`).
 
-1. Откройте **PowerShell от имени Администратора**:
-   * Нажмите `Win + X` -> выберите **Терминал (Администратор)** или **PowerShell (Администратор)**.
-2. Перейдите в папку с репозиторием и запустите мастер-скрипт:
-   ```powershell
-   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-   .\apply_all_tweaks.ps1
-   ```
+### ⚡ Быстрый запуск
+
+#### Вариант 1: Графическое приложение (Рекомендуется)
+Дважды кликните по файлу **`launch_gui.bat`**.
+
+#### Вариант 2: Консольный скрипт PowerShell
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\apply_all_tweaks.ps1
+```
 
 ### 📂 Структура репозитория и модули
 
 ```text
-├── apply_all_tweaks.ps1               # Главный мастер-скрипт (Auto-UAC + Итоговый отчет)
+├── launch_gui.bat                     # Лаунчер GUI-приложения в 1 клик (Авто-UAC)
+├── optimizer_gui.ps1                  # Графическое WPF-приложение
+├── apply_all_tweaks.ps1               # Консольный мастер-скрипт
 ├── scripts/
 │   ├── 01_tablet_pen_latency.ps1      # Инпут-лаг планшета, Group Policies, Windows Ink и USB
 │   ├── 02_gaming_system_latency.ps1   # BCD таймеры, кванты CPU (0x26), CSRSS/DWM, Game Mode
@@ -70,13 +86,6 @@ During execution, each tweak provides clear visual feedback:
 │   └── 04_debloat_services_tasks.ps1  # Отключение телеметрии, SysMain и тяжелых задач
 └── README.md                          # Двуязычная документация
 ```
-
-### 📊 Наглядные статусы выполнения:
-* `[  OK  ]` 🟢 **Зеленый:** Параметр или твик успешно применен.
-* `[ WARN ]` 🟡 **Желтый:** Предупреждение или пропуск (например, служба отсутствует в данной версии Windows).
-* `[ FAIL ]` 🔴 **Красный:** Ошибка применения или нехватка прав доступа.
-
----
 
 ### 🖊️ Оптимизации для XP-Pen Deco 640 и планшетов:
 1. **Устранение микро-задержек USB-контроллера:**
