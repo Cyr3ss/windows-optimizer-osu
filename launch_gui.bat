@@ -1,5 +1,5 @@
 @echo off
-title Windows Gaming & Tablet Optimizer (GUI Launcher)
+title Windows Gaming and Tablet Optimizer (GUI Launcher)
 cd /d "%~dp0"
 
 :: Check Administrator Privileges and auto-elevate
@@ -11,7 +11,7 @@ if %errorLevel% neq 0 (
 )
 
 echo =================================================================
-echo   Windows Gaming & Tablet Optimizer - Launching GUI...
+echo   Windows Gaming and Tablet Optimizer - Launching GUI...
 echo =================================================================
 echo [*] Working Directory: %~dp0
 echo.
@@ -29,6 +29,6 @@ if %EXIT_CODE% neq 0 (
     pause
 ) else (
     echo [V] Application closed cleanly.
-    echo Нажмите любую клавишу для закрытия этого окна...
+    echo Press any key to close this console window...
     pause >nul
 )
