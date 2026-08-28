@@ -126,6 +126,15 @@ def run_cmd(cmd: str) -> bool:
         log_exception(e, f"run_cmd: {cmd}")
         return False
 
+def get_active_power_scheme() -> str:
+    try:
+        k = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes", 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
+        val, _ = winreg.QueryValueEx(k, "ActivePowerScheme")
+        winreg.CloseKey(k)
+        return str(val)
+    except Exception:
+        return ""
+
 # ---------------------------------------------------------------------------
 # Deep State Checking and Optimizer Engine
 # ---------------------------------------------------------------------------
@@ -136,7 +145,7 @@ class TweaksEngine:
     def check_pen_hold() -> str:
         h_mode = reg_get_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Wisp\Pen\SysEventParameters", "HoldMode")
         f_mode = reg_get_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Wisp\Pen\SysEventParameters", "FlickMode")
-        return "Already Optimized" if (h_mode == 0 and f_mode == 0) else "Available"
+        return "Already Applied" if (h_mode == 0 and f_mode == 0) else "Available"
 
     @staticmethod
     def apply_pen_hold() -> bool:
@@ -208,19 +217,29 @@ class TweaksEngine:
     @staticmethod
     def check_usb_suspend() -> str:
         try:
-            res = subprocess.run("powercfg /query SCHEME_CURRENT 2a737441-1930-4402-9177-b06418304ddf 48e6b7a6-50f5-4782-a5d4-53bb8f07e226", shell=True, capture_output=True, text=True)
-            if "0x00000000" in res.stdout:
-                return "Already Disabled"
+            active = get_active_power_scheme()
+            if active:
+                p = rf"SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\{active}\2a737441-1930-4402-9177-b06418304ddf\48e6b7a6-50f5-4782-a5d4-53bb8f07e226"
+                val = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, p, "ACSettingIndex")
+                if val == 0:
+                    return "Already Disabled"
             return "Available"
         except Exception:
             return "Available"
 
     @staticmethod
     def apply_usb_suspend() -> bool:
+        active = get_active_power_scheme()
+        if active:
+            p = rf"SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\{active}\2a737441-1930-4402-9177-b06418304ddf\48e6b7a6-50f5-4782-a5d4-53bb8f07e226"
+            reg_set_dword(winreg.HKEY_LOCAL_MACHINE, p, "ACSettingIndex", 0)
+            reg_set_dword(winreg.HKEY_LOCAL_MACHINE, p, "DCSettingIndex", 0)
+
         run_cmd("powercfg /setacvalueindex SCHEME_CURRENT 2a737441-1930-4402-9177-b06418304ddf 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0")
         run_cmd("powercfg /setdcvalueindex SCHEME_CURRENT 2a737441-1930-4402-9177-b06418304ddf 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0")
         run_cmd("powercfg /setactive SCHEME_CURRENT")
-        ps_wmi = 'Get-CimInstance MSPower_DeviceEnable -Namespace root\\wmi -ErrorAction SilentlyContinue | Where-Object { $_.InstanceName -match "USB" } | ForEach-Object { Set-CimInstance -Query "Select * from MSPower_DeviceEnable where InstanceName=\'$($_.InstanceName)\'" -Property @{Enable=$false} -Namespace root\\wmi -ErrorAction SilentlyContinue }'
+
+        ps_wmi = 'Get-CimInstance MSPower_DeviceEnable -Namespace root/wmi -ErrorAction SilentlyContinue | Where-Object { $_.InstanceName -like "*USB*" } | ForEach-Object { Set-CimInstance -Query "Select * from MSPower_DeviceEnable where InstanceName=\'$($_.InstanceName)\'" -Property @{Enable=$false} -Namespace root/wmi -ErrorAction SilentlyContinue }'
         run_cmd(f'powershell.exe -NoProfile -Command "{ps_wmi}"')
         return True
 
@@ -307,15 +326,24 @@ class TweaksEngine:
     @staticmethod
     def check_cpu_unpark() -> str:
         try:
-            res = subprocess.run("powercfg -query SCHEME_CURRENT SUB_PROCESSOR CPMINCORES", shell=True, capture_output=True, text=True)
-            if "0x00000064" in res.stdout or "100%" in res.stdout:
-                return "Already Applied (100%)"
+            active = get_active_power_scheme()
+            if active:
+                p = rf"SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\{active}\54533251-82be-4824-96c1-47b60b740d00\0cc5b647-c1df-4637-891a-dec35c318583"
+                val = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, p, "ACSettingIndex")
+                if val == 100 or val == 0x64:
+                    return "Already Applied (100%)"
             return "Available"
         except Exception:
             return "Available"
 
     @staticmethod
     def apply_cpu_unpark() -> bool:
+        active = get_active_power_scheme()
+        if active:
+            p = rf"SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\{active}\54533251-82be-4824-96c1-47b60b740d00\0cc5b647-c1df-4637-891a-dec35c318583"
+            reg_set_dword(winreg.HKEY_LOCAL_MACHINE, p, "ACSettingIndex", 100)
+            reg_set_dword(winreg.HKEY_LOCAL_MACHINE, p, "DCSettingIndex", 100)
+
         run_cmd("powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR CPMINCORES 100")
         run_cmd("powercfg -setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR CPMINCORES 100")
         run_cmd("powercfg -setactive SCHEME_CURRENT")
