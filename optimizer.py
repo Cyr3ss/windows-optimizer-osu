@@ -213,32 +213,70 @@ class TweaksEngine:
         run_cmd("sc.exe config TabletInputService start= disabled")
         return True
 
-    # 5. USB Selective Suspend
+    # 5. USB Selective Suspend & Root Hubs
     @staticmethod
     def check_usb_suspend() -> str:
-        try:
-            active = get_active_power_scheme()
-            if active:
-                p = rf"SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\{active}\2a737441-1930-4402-9177-b06418304ddf\48e6b7a6-50f5-4782-a5d4-53bb8f07e226"
-                val = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, p, "ACSettingIndex")
-                if val == 0:
-                    return "Already Disabled"
-            return "Available"
-        except Exception:
-            return "Available"
+        # Check global USB service flag
+        v_usb = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Services\USB", "DisableSelectiveSuspend")
+        if v_usb == 1:
+            return "Already Disabled"
+
+        # Check active power scheme
+        active = get_active_power_scheme()
+        if active:
+            p = rf"SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\{active}\2a737441-1930-4402-9177-b06418304ddf\48e6b7a6-50f5-4782-a5d4-53bb8f07e226"
+            val = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, p, "ACSettingIndex")
+            if val == 0:
+                return "Already Disabled"
+
+        return "Available"
 
     @staticmethod
     def apply_usb_suspend() -> bool:
+        # 1. Set global kernel USB driver flag
+        reg_set_dword(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Services\USB", "DisableSelectiveSuspend", 1)
+
+        # 2. Set power scheme values directly in registry
         active = get_active_power_scheme()
         if active:
             p = rf"SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\{active}\2a737441-1930-4402-9177-b06418304ddf\48e6b7a6-50f5-4782-a5d4-53bb8f07e226"
             reg_set_dword(winreg.HKEY_LOCAL_MACHINE, p, "ACSettingIndex", 0)
             reg_set_dword(winreg.HKEY_LOCAL_MACHINE, p, "DCSettingIndex", 0)
 
+        # 3. Apply via powercfg commands
         run_cmd("powercfg /setacvalueindex SCHEME_CURRENT 2a737441-1930-4402-9177-b06418304ddf 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0")
         run_cmd("powercfg /setdcvalueindex SCHEME_CURRENT 2a737441-1930-4402-9177-b06418304ddf 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0")
         run_cmd("powercfg /setactive SCHEME_CURRENT")
 
+        # 4. Disable power management on USB Hub devices in Device Manager registry
+        try:
+            usb_enum = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Enum\USB", 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
+            i = 0
+            while True:
+                try:
+                    dev_name = winreg.EnumKey(usb_enum, i)
+                    dev_key = winreg.OpenKey(usb_enum, dev_name, 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
+                    j = 0
+                    while True:
+                        try:
+                            inst_name = winreg.EnumKey(dev_key, j)
+                            inst_param_path = rf"SYSTEM\CurrentControlSet\Enum\USB\{dev_name}\{inst_name}\Device Parameters"
+                            reg_set_dword(winreg.HKEY_LOCAL_MACHINE, inst_param_path, "EnhancedPowerManagementEnabled", 0)
+                            reg_set_dword(winreg.HKEY_LOCAL_MACHINE, inst_param_path, "AllowIdleIrpInD3", 0)
+                            reg_set_dword(winreg.HKEY_LOCAL_MACHINE, inst_param_path, "DeviceSelectiveSuspended", 0)
+                            reg_set_dword(winreg.HKEY_LOCAL_MACHINE, inst_param_path, "SelectiveSuspendEnabled", 0)
+                            j += 1
+                        except OSError:
+                            break
+                    winreg.CloseKey(dev_key)
+                    i += 1
+                except OSError:
+                    break
+            winreg.CloseKey(usb_enum)
+        except Exception:
+            pass
+
+        # 5. Disable Root Hub sleep via WMI / CIM
         ps_wmi = 'Get-CimInstance MSPower_DeviceEnable -Namespace root/wmi -ErrorAction SilentlyContinue | Where-Object { $_.InstanceName -like "*USB*" } | ForEach-Object { Set-CimInstance -Query "Select * from MSPower_DeviceEnable where InstanceName=\'$($_.InstanceName)\'" -Property @{Enable=$false} -Namespace root/wmi -ErrorAction SilentlyContinue }'
         run_cmd(f'powershell.exe -NoProfile -Command "{ps_wmi}"')
         return True
@@ -889,7 +927,7 @@ class OptimizerApp:
             if self.chk_vars["chk_UsbSuspend"].get():
                 TweaksEngine.apply_usb_suspend()
                 self.set_badge("status_UsbSuspend", "[ Already Disabled ]", "#00E676")
-                self.log("[OK] USB Selective Suspend и спящий режим Root Hubs отключены.")
+                self.log("[OK] USB Selective Suspend и энергосбережение Root Hubs отключены.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 6. BCD Timers
