@@ -259,7 +259,7 @@ try {
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
-                                    <ColumnEnvironment Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
                                     <CheckBox Name="chk_CsrssDwm" Content="Boost Input Server (CSRSS) and Compositor (DWM) Priorities" IsChecked="True" FontWeight="SemiBold"/>

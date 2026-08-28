@@ -6,7 +6,7 @@ cd /d "%~dp0"
 net session >nul 2>&1
 if %errorLevel% neq 0 (
     echo [*] Requesting Administrator Privileges (UAC)...
-    powershell.exe -NoProfile -Command "Start-Process cmd.exe -ArgumentList '/c cd /d `\"%~dp0`\" ^& powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File `\"%~dp0optimizer_gui.ps1`\"' -Verb RunAs"
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process powershell.exe -ArgumentList '-NoProfile -STA -ExecutionPolicy Bypass -File \"\"%~dp0optimizer_gui.ps1\"\"' -Verb RunAs"
     exit /b
 )
 
@@ -27,6 +27,4 @@ if %EXIT_CODE% neq 0 (
     echo =================================================================
     echo.
     pause
-) else (
-    echo [V] Application closed cleanly.
 )
