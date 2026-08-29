@@ -4,7 +4,7 @@
 =============================================================================
  Native Python 3 GUI application with dark theme, accurate system scanner,
  granular tweak checkboxes, live console logger, and exception reporting.
- Compatible with PyInstaller for building standalone .exe files.
+ Safe for Laptops, Touchpads (Synaptics/ELAN/Precision), and Graphics Tablets.
 =============================================================================
 """
 
@@ -135,6 +135,13 @@ def get_active_power_scheme() -> str:
     except Exception:
         return ""
 
+def is_laptop() -> bool:
+    try:
+        res = subprocess.run("wmic path Win32_Battery get BatteryStatus", shell=True, capture_output=True, text=True)
+        return "BatteryStatus" in res.stdout and len(res.stdout.strip().splitlines()) > 1
+    except Exception:
+        return False
+
 # ---------------------------------------------------------------------------
 # Deep State Checking and Optimizer Engine
 # ---------------------------------------------------------------------------
@@ -193,92 +200,53 @@ class TweaksEngine:
         reg_set_binary(winreg.HKEY_CURRENT_USER, r"Control Panel\Mouse", "SmoothMouseYCurve", zero_curve)
         return True
 
-    # 4. Tablet Input Service
+    # 4. Touchpad & Touch System Safety Check
     @staticmethod
-    def check_tablet_service() -> str:
-        try:
-            res = subprocess.run("sc.exe qc TabletInputService", shell=True, capture_output=True, text=True)
-            out = res.stdout.upper()
-            if "DISABLED" in out:
-                return "Already Disabled"
-            elif "TABLETINPUTSERVICE" in out or res.returncode == 0:
-                return "Detected (Active)"
-            return "Not Found (N/A)"
-        except Exception:
-            return "Not Found (N/A)"
+    def check_touchpad_safety() -> str:
+        leave_on = reg_get_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad", "LeaveOnWithMouse")
+        tp_status = reg_get_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad\Status", "Enabled")
+        if leave_on == 1 and (tp_status is None or tp_status == 1):
+            return "Touchpad Safe (Active)"
+        return "Fix Needed"
 
     @staticmethod
-    def apply_tablet_service() -> bool:
-        run_cmd("sc.exe stop TabletInputService")
-        run_cmd("sc.exe config TabletInputService start= disabled")
+    def apply_touchpad_safety() -> bool:
+        # Guarantee Touchpad is never disabled when mouse/tablet is connected
+        reg_set_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad", "LeaveOnWithMouse", 1)
+        reg_set_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad", "TapsEnabled", 4294967295)
+        reg_set_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad", "PanEnabled", 4294967295)
+        reg_set_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad", "ZoomEnabled", 4294967295)
+        reg_set_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad\Status", "Enabled", 1)
+        reg_set_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Wisp\Touch", "TouchUI", 1)
+
+        # On laptops with Precision Touchpads, keep TabletInputService running so gestures work
+        run_cmd("sc.exe config TabletInputService start= auto")
+        run_cmd("sc.exe start TabletInputService")
         return True
 
-    # 5. USB Selective Suspend & Root Hubs
+    # 5. USB Selective Suspend (Safe for Laptops)
     @staticmethod
     def check_usb_suspend() -> str:
-        # Check global USB service flag
-        v_usb = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Services\USB", "DisableSelectiveSuspend")
-        if v_usb == 1:
-            return "Already Disabled"
-
-        # Check active power scheme
         active = get_active_power_scheme()
         if active:
             p = rf"SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\{active}\2a737441-1930-4402-9177-b06418304ddf\48e6b7a6-50f5-4782-a5d4-53bb8f07e226"
             val = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, p, "ACSettingIndex")
             if val == 0:
                 return "Already Disabled"
-
         return "Available"
 
     @staticmethod
     def apply_usb_suspend() -> bool:
-        # 1. Set global kernel USB driver flag
-        reg_set_dword(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Services\USB", "DisableSelectiveSuspend", 1)
-
-        # 2. Set power scheme values directly in registry
+        # Safe USB power configuration via Power Plans
         active = get_active_power_scheme()
         if active:
             p = rf"SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\{active}\2a737441-1930-4402-9177-b06418304ddf\48e6b7a6-50f5-4782-a5d4-53bb8f07e226"
             reg_set_dword(winreg.HKEY_LOCAL_MACHINE, p, "ACSettingIndex", 0)
             reg_set_dword(winreg.HKEY_LOCAL_MACHINE, p, "DCSettingIndex", 0)
 
-        # 3. Apply via powercfg commands
         run_cmd("powercfg /setacvalueindex SCHEME_CURRENT 2a737441-1930-4402-9177-b06418304ddf 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0")
         run_cmd("powercfg /setdcvalueindex SCHEME_CURRENT 2a737441-1930-4402-9177-b06418304ddf 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0")
         run_cmd("powercfg /setactive SCHEME_CURRENT")
-
-        # 4. Disable power management on USB Hub devices in Device Manager registry
-        try:
-            usb_enum = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Enum\USB", 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
-            i = 0
-            while True:
-                try:
-                    dev_name = winreg.EnumKey(usb_enum, i)
-                    dev_key = winreg.OpenKey(usb_enum, dev_name, 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
-                    j = 0
-                    while True:
-                        try:
-                            inst_name = winreg.EnumKey(dev_key, j)
-                            inst_param_path = rf"SYSTEM\CurrentControlSet\Enum\USB\{dev_name}\{inst_name}\Device Parameters"
-                            reg_set_dword(winreg.HKEY_LOCAL_MACHINE, inst_param_path, "EnhancedPowerManagementEnabled", 0)
-                            reg_set_dword(winreg.HKEY_LOCAL_MACHINE, inst_param_path, "AllowIdleIrpInD3", 0)
-                            reg_set_dword(winreg.HKEY_LOCAL_MACHINE, inst_param_path, "DeviceSelectiveSuspended", 0)
-                            reg_set_dword(winreg.HKEY_LOCAL_MACHINE, inst_param_path, "SelectiveSuspendEnabled", 0)
-                            j += 1
-                        except OSError:
-                            break
-                    winreg.CloseKey(dev_key)
-                    i += 1
-                except OSError:
-                    break
-            winreg.CloseKey(usb_enum)
-        except Exception:
-            pass
-
-        # 5. Disable Root Hub sleep via WMI / CIM
-        ps_wmi = 'Get-CimInstance MSPower_DeviceEnable -Namespace root/wmi -ErrorAction SilentlyContinue | Where-Object { $_.InstanceName -like "*USB*" } | ForEach-Object { Set-CimInstance -Query "Select * from MSPower_DeviceEnable where InstanceName=\'$($_.InstanceName)\'" -Property @{Enable=$false} -Namespace root/wmi -ErrorAction SilentlyContinue }'
-        run_cmd(f'powershell.exe -NoProfile -Command "{ps_wmi}"')
         return True
 
     # 6. BCD Timers (Invariant TSC)
@@ -679,8 +647,8 @@ class OptimizerApp:
             ("chk_PenHold", "Отключить задержку касания (HoldMode) и жесты (FlickMode)", "Убирает 300 мс задержки при первом касании пером и буфер жестов Windows Ink.", "status_PenHold"),
             ("chk_TabletGPO", "Применить Group Policies для планшетов (TabletPC & PenWorkspace)", "Системный запрет на генерацию анимаций кругов (Ripple), зажатия и жестов в HKLM/HKCU.", "status_TabletGPO"),
             ("chk_LinearCurve", "Обнулить нелинейное сглаживание курсора (1:1 Raw Linear Curve)", "Обнуляет полиномиальные кривые SmoothMouseX/YCurve для абсолютно равномерного движения.", "status_LinearCurve"),
-            ("chk_TabletInputSvc", "Отключить службу сенсорной клавиатуры и рукописного ввода (TabletInputService)", "Убирает перехват координат пера системным процессом Windows.", "status_TabletInputSvc"),
-            ("chk_UsbSuspend", "Отключить энергосбережение USB (Selective Suspend & Root Hubs)", "Предотвращает засыпание контроллера планшета, обеспечивая непрерывную частоту опроса 1000Hz.", "status_UsbSuspend"),
+            ("chk_TouchpadSafety", "Защита тачпада ноутбука (LeaveOnWithMouse = 1 & Taps/Gestures)", "Гарантирует работу тачпада при подключенной мыши/планшете и сохраняет жесты Precision Touchpad.", "status_TouchpadSafety"),
+            ("chk_UsbSuspend", "Отключить энергосбережение USB (Selective Suspend в схеме питания)", "Предотвращает засыпание USB портов, обеспечивая непрерывную частоту опроса 1000Hz.", "status_UsbSuspend"),
         ])
 
         self.tab2 = self.create_tab("⚡ Система, CPU и FPS", [
@@ -776,7 +744,7 @@ class OptimizerApp:
         self.log("Все чекбоксы сняты.", "yellow")
 
     def format_badge(self, status: str) -> tuple:
-        if "Already" in status or "Active" in status:
+        if "Already" in status or "Active" in status or "Safe" in status:
             return f"[ {status} ]", "#00E676"
         elif "Detected" in status:
             return f"[ {status} ]", "#FFD600"
@@ -803,9 +771,9 @@ class OptimizerApp:
             t, c = self.format_badge(TweaksEngine.check_linear_curve())
             self.set_badge("status_LinearCurve", t, c)
 
-            # 4. Tablet Service
-            t, c = self.format_badge(TweaksEngine.check_tablet_service())
-            self.set_badge("status_TabletInputSvc", t, c)
+            # 4. Touchpad Safety
+            t, c = self.format_badge(TweaksEngine.check_touchpad_safety())
+            self.set_badge("status_TouchpadSafety", t, c)
 
             # 5. USB Suspend
             t, c = self.format_badge(TweaksEngine.check_usb_suspend())
@@ -880,7 +848,7 @@ class OptimizerApp:
 
             self.prog_bar["value"] = 100
             self.lbl_status.config(text="Сканирование завершено!")
-            self.log("[V] Сканирование успешно завершено. Состояние всех 21 модулей проверено.", "green")
+            self.log("[V] Сканирование успешно завершено. Все модули проверены.", "green")
         except Exception as e:
             log_exception(e, "scan_system")
             self.log(f"[!] Ошибка сканирования: {e}", "red")
@@ -916,18 +884,18 @@ class OptimizerApp:
                 self.log("[OK] Нелинейное сглаживание курсора обнулено (1:1 Raw).")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
-            # 4. Tablet Service
-            if self.chk_vars["chk_TabletInputSvc"].get():
-                TweaksEngine.apply_tablet_service()
-                self.set_badge("status_TabletInputSvc", "[ Already Disabled ]", "#00E676")
-                self.log("[OK] TabletInputService отключена.")
+            # 4. Touchpad Safety
+            if self.chk_vars["chk_TouchpadSafety"].get():
+                TweaksEngine.apply_touchpad_safety()
+                self.set_badge("status_TouchpadSafety", "[ Touchpad Safe (Active) ]", "#00E676")
+                self.log("[OK] Настройки тачпада и жестов Precision TouchPad защищены.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 5. USB Suspend
             if self.chk_vars["chk_UsbSuspend"].get():
                 TweaksEngine.apply_usb_suspend()
                 self.set_badge("status_UsbSuspend", "[ Already Disabled ]", "#00E676")
-                self.log("[OK] USB Selective Suspend и энергосбережение Root Hubs отключены.")
+                self.log("[OK] USB Selective Suspend в схеме электропитания отключен.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 6. BCD Timers
@@ -1048,7 +1016,7 @@ class OptimizerApp:
             self.lbl_status.config(text="Готово! Все твики применены.")
             self.log("=====================================================", "cyan")
             self.log("[V] ВСЕ ОПТИМИЗАЦИИ ПРИМЕНЕНЫ! Перезагрузите ПК.", "green")
-            messagebox.showinfo("Готово", "Все выбранные оптимизации успешно применены!\n\nРекомендуется перезагрузить компьютер для активации BCD таймеров и квантов CPU.")
+            messagebox.showinfo("Готово", "Все выбранные оптимизации успешно применены!\n\nРекомендуется перезагрузить компьютер.")
         except Exception as e:
             log_exception(e, "apply_tweaks")
             self.log(f"[!] Ошибка при применении твиков: {e}", "red")
