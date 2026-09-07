@@ -4,6 +4,7 @@
 =============================================================================
  Native Python 3 GUI application with dark theme, accurate system scanner,
  granular tweak checkboxes, live console logger, and exception reporting.
+ Bilingual (English / Русский) language switcher included.
  Standalone (zero external pip dependencies) & PyInstaller compatible.
 =============================================================================
 """
@@ -149,12 +150,249 @@ def get_active_power_scheme() -> str:
     except Exception:
         return ""
 
-def is_laptop() -> bool:
-    try:
-        res = subprocess.run("wmic path Win32_Battery get BatteryStatus", shell=True, capture_output=True, text=True)
-        return "BatteryStatus" in res.stdout and len(res.stdout.strip().splitlines()) > 1
-    except Exception:
-        return False
+# ---------------------------------------------------------------------------
+# Localization Dictionary (RU / EN)
+# ---------------------------------------------------------------------------
+LOCALIZATION = {
+    "ru": {
+        "title": "⚡ Windows Gaming and Tablet Optimizer",
+        "subtitle": "Интерактивная оптимизация графических планшетов, системных таймеров, сети и FPS",
+        "btn_lang": "🌐 English",
+        "btn_scan": "🔍 Сканировать",
+        "btn_sel": "Выбрать все",
+        "btn_desel": "Снять все",
+        "btn_apply": "⚡ Применить выбранное",
+        "status_ready": "Готов к работе",
+        "status_scanning": "Сканирование системы...",
+        "status_applying": "Применение твиков...",
+        "status_done": "Готово! Все твики применены.",
+        "msg_done_title": "Готово",
+        "msg_done_body": "Все выбранные оптимизации успешно применены!\n\nРекомендуется перезагрузить компьютер для активации таймеров и квантов CPU.",
+        "log_scan_start": "=== Запуск предварительного сканирования системы ===",
+        "log_scan_done": "[V] Сканирование успешно завершено. Все модули проверены.",
+        "log_apply_start": "=== Применение выбранных оптимизаций ===",
+        "log_apply_done": "[V] ВСЕ ОПТИМИЗАЦИИ ПРИМЕНЕНЫ! Рекомендуется перезагрузить ПК.",
+        "log_all_selected": "Все чекбоксы отмечены.",
+        "log_all_deselected": "Все чекбоксы сняты.",
+        "badge_unverified": "[ Не проверено ]",
+        "badge_applied": "[ Уже применено ]",
+        "badge_active": "[ Активно ]",
+        "badge_available": "[ Доступно ]",
+        "badge_safe": "[ Защищено ]",
+        "badge_disabled": "[ Отключено ]",
+        "tabs": {
+            "tab1": "🖊️ Планшет и Перо",
+            "tab2": "⚡ Система и FPS",
+            "tab3": "🌐 Сеть и Пинг",
+            "tab4": "🧹 Службы и SSD",
+        },
+        "tweaks": {
+            "chk_PenHold": {
+                "title": "Отключить задержку касания (HoldMode) и жесты (FlickMode)",
+                "desc": "Убирает 300 мс задержки при первом касании пером и буфер жестов Windows Ink."
+            },
+            "chk_TabletGPO": {
+                "title": "Применить Group Policies для планшетов (TabletPC & PenWorkspace)",
+                "desc": "Системный запрет на генерацию анимаций кругов (Ripple), зажатия и жестов в HKLM/HKCU."
+            },
+            "chk_LinearCurve": {
+                "title": "Обнулить нелинейное сглаживание курсора (1:1 Raw Linear Curve)",
+                "desc": "Обнуляет полиномиальные кривые SmoothMouseX/YCurve для абсолютно равномерного движения."
+            },
+            "chk_TouchpadSafety": {
+                "title": "Защита тачпада ноутбука (LeaveOnWithMouse = 1 & Taps/Gestures)",
+                "desc": "Гарантирует работу тачпада при подключенной мыши/планшете и сохраняет жесты Precision Touchpad."
+            },
+            "chk_UsbSuspend": {
+                "title": "Отключить энергосбережение USB (Selective Suspend в схеме питания)",
+                "desc": "Предотвращает засыпание USB портов, обеспечивая непрерывную частоту опроса 1000Hz."
+            },
+            "chk_BcdTimers": {
+                "title": "Включить аппаратный таймер TSC и 0.5ms (disabledynamictick yes)",
+                "desc": "Устраняет пропуск тиков таймера процессора и переводит Windows на инвариантный таймер TSC (0.5 мс)."
+            },
+            "chk_Win32Priority": {
+                "title": "Настроить кванты CPU 3:1 в пользу активной игры (Win32PrioritySeparation = 0x26)",
+                "desc": "Выделяет активному окну в 3 раза больше времени CPU без прерываний на фоновые службы."
+            },
+            "chk_CsrssDwm": {
+                "title": "Повысить приоритеты диспетчера ввода (CSRSS), DWM и OpenTabletDriver",
+                "desc": "Переводит csrss.exe, dwm.exe и демон OTD в High Priority для мгновенной доставки аппаратных кликов."
+            },
+            "chk_GameMode": {
+                "title": "Включить Windows Game Mode и отключить GameDVR / GameBar",
+                "desc": "Активирует игровой режим Windows и полностью выключает фоновый процесс GameBarPresenceWriter."
+            },
+            "chk_KeyboardDelay": {
+                "title": "Снизить задержку повтора клавиатуры (KeyboardDelay = 0 / Speed = 31)",
+                "desc": "Ускоряет регистрацию стримов K1/K2 в osu! и обнуляет время задержки дребезга (BounceTime)."
+            },
+            "chk_CpuUnpark": {
+                "title": "Разблокировать спящие ядра процессора (CPU Core Unparking 100%)",
+                "desc": "Запрещает процессору усыплять логические ядра, устраняя 2-5 мс лага пробуждения."
+            },
+            "chk_KernelRam": {
+                "title": "Зафиксировать ядро в RAM и отключить Fast Startup (Чистый старт ОС)",
+                "desc": "Включает DisablePagingExecutive = 1 и отключает гибернацию ядра при выключении ПК."
+            },
+            "chk_OsuFso": {
+                "title": "Принудительный аппаратный Fullscreen Exclusive для osu!.exe",
+                "desc": "Отключает 'Оптимизацию во весь экран' для osu! (прямой рендер без буфера DWM)."
+            },
+            "chk_Nagle": {
+                "title": "Отключить алгоритм Нейгла (TCPNoDelay = 1, TcpAckFrequency = 1)",
+                "desc": "Отправляет мелкие пакеты ввода мгновенно без накопления в сетевом буфере."
+            },
+            "chk_QoS": {
+                "title": "Снять 20% системное ограничение пропускной способности (QoS = 0)",
+                "desc": "Разблокирует 100% пропускной способности интернет-канала для сетевых игр."
+            },
+            "chk_DeliveryOpt": {
+                "title": "Отключить фоновую раздачу обновлений P2P (Delivery Optimization)",
+                "desc": "Запрещает Windows раздавать скачанные обновления по локальной сети и интернету."
+            },
+            "chk_Telemetry": {
+                "title": "Отключить службу сбора телеметрии (DiagTrack) и SysMain",
+                "desc": "Останавливает постоянную запись диагностических логов на SSD и освобождает ОЗУ."
+            },
+            "chk_OemServices": {
+                "title": "Перевести второстепенные OEM/Служебные процессы в ручной режим",
+                "desc": "Переводит фоновые диагностические службы (HP, Dell, AnyDesk, WerSvc) в режим Manual."
+            },
+            "chk_TasksDebloat": {
+                "title": "Отключить тяжелые задачи планировщика (Compatibility Appraiser)",
+                "desc": "Отключает периодические фоновые сканеры совместимости и отчеты об ошибках."
+            },
+            "chk_SsdLastAccess": {
+                "title": "Оптимизировать файловую систему SSD (Disable LastAccess Timestamps)",
+                "desc": "Отключает лишние операции записи на SSD при обычном чтении файлов (fsutil)."
+            },
+            "chk_UiDelay": {
+                "title": "Убрать искусственные задержки меню (MenuShowDelay = 0 / MinAnimate = 0)",
+                "desc": "Делает открытие контекстных меню и отклик окон Windows моментальным."
+            },
+        }
+    },
+    "en": {
+        "title": "⚡ Windows Gaming & Tablet Optimizer",
+        "subtitle": "Interactive optimization for graphics tablets, system timers, network and FPS",
+        "btn_lang": "🌐 Русский",
+        "btn_scan": "🔍 Scan System",
+        "btn_sel": "Select All",
+        "btn_desel": "Deselect All",
+        "btn_apply": "⚡ Apply Selected",
+        "status_ready": "Ready",
+        "status_scanning": "Scanning system...",
+        "status_applying": "Applying tweaks...",
+        "status_done": "Done! All tweaks applied.",
+        "msg_done_title": "Done",
+        "msg_done_body": "All selected optimizations successfully applied!\n\nA computer restart is recommended to activate timer resolution and CPU quantums.",
+        "log_scan_start": "=== Starting pre-application system scan ===",
+        "log_scan_done": "[V] System scan completed. All 21 modules verified.",
+        "log_apply_start": "=== Applying selected optimizations ===",
+        "log_apply_done": "[V] ALL OPTIMIZATIONS APPLIED! PC restart recommended.",
+        "log_all_selected": "All checkboxes selected.",
+        "log_all_deselected": "All checkboxes deselected.",
+        "badge_unverified": "[ Unchecked ]",
+        "badge_applied": "[ Already Applied ]",
+        "badge_active": "[ Active ]",
+        "badge_available": "[ Available ]",
+        "badge_safe": "[ Safe & Active ]",
+        "badge_disabled": "[ Disabled ]",
+        "tabs": {
+            "tab1": "🖊️ Tablet & Pen",
+            "tab2": "⚡ System & FPS",
+            "tab3": "🌐 Network & Ping",
+            "tab4": "🧹 Services & SSD",
+        },
+        "tweaks": {
+            "chk_PenHold": {
+                "title": "Disable Pen Hold & Flick Latency (HoldMode / FlickMode)",
+                "desc": "Eliminates native 300ms tap-and-hold delay and Windows Ink gesture buffering."
+            },
+            "chk_TabletGPO": {
+                "title": "Apply Tablet Group Policies (TabletPC & PenWorkspace)",
+                "desc": "System-level block on ripple animations, press-and-hold circles, and telemetry."
+            },
+            "chk_LinearCurve": {
+                "title": "Reset Cursor Smoothing to 1:1 (Raw Linear Curve)",
+                "desc": "Zeroes SmoothMouseX/YCurve polynomial curves for pure 1:1 linear pointer movement."
+            },
+            "chk_TouchpadSafety": {
+                "title": "Laptop Touchpad Protection (LeaveOnWithMouse = 1 & Taps/Gestures)",
+                "desc": "Ensures touchpad remains active with mouse/tablet connected and preserves gestures."
+            },
+            "chk_UsbSuspend": {
+                "title": "Disable USB Selective Suspend in Active Power Scheme",
+                "desc": "Prevents USB controllers from entering low-power sleep, ensuring solid 1000Hz polling."
+            },
+            "chk_BcdTimers": {
+                "title": "Enable Hardware Invariant TSC Timers & 0.5ms (disabledynamictick yes)",
+                "desc": "Eliminates synthetic timer tick drop and locks system timer to 0.500 ms (500 µs)."
+            },
+            "chk_Win32Priority": {
+                "title": "Set 3:1 CPU Time-Slices for Active Game (Win32PrioritySeparation = 0x26)",
+                "desc": "Allocates 3x more dedicated CPU execution time to the active foreground game window."
+            },
+            "chk_CsrssDwm": {
+                "title": "Elevate Priorities for CSRSS, DWM and OpenTabletDriver",
+                "desc": "Sets csrss.exe, dwm.exe, and OTD daemon to High Priority for instant click and frame delivery."
+            },
+            "chk_GameMode": {
+                "title": "Enable Windows Game Mode & Disable GameDVR / GameBar",
+                "desc": "Activates Windows Game Mode and disables GameBarPresenceWriter background recording."
+            },
+            "chk_KeyboardDelay": {
+                "title": "Reduce Keyboard Repeat Delay (KeyboardDelay = 0 / Speed = 31)",
+                "desc": "Speeds up K1/K2 key streaming registration in osu! and eliminates debounce wait."
+            },
+            "chk_CpuUnpark": {
+                "title": "Unpark All CPU Cores (CPU Core Unparking 100%)",
+                "desc": "Forces all logical processor cores to remain active, eliminating 2-5ms wake latency."
+            },
+            "chk_KernelRam": {
+                "title": "Lock Kernel in RAM & Disable Fast Startup (Clean OS Boot)",
+                "desc": "Enables DisablePagingExecutive = 1 and disables hibernation caching upon shutdown."
+            },
+            "chk_OsuFso": {
+                "title": "Enforce Hardware Fullscreen Exclusive for osu!.exe",
+                "desc": "Disables Fullscreen Optimizations for osu! to enable direct flip rendering without DWM lag."
+            },
+            "chk_Nagle": {
+                "title": "Disable Nagle's Algorithm (TCPNoDelay = 1, TcpAckFrequency = 1)",
+                "desc": "Sends small network packets instantaneously without waiting for packet buffer fills."
+            },
+            "chk_QoS": {
+                "title": "Remove 20% Reserved System Bandwidth Limit (QoS = 0)",
+                "desc": "Unlocks 100% network bandwidth for online multiplayer gaming."
+            },
+            "chk_DeliveryOpt": {
+                "title": "Disable P2P Background Updates (Delivery Optimization)",
+                "desc": "Blocks Windows from uploading and downloading updates over local network and internet."
+            },
+            "chk_Telemetry": {
+                "title": "Disable Telemetry Diagnostics Service (DiagTrack) & SysMain",
+                "desc": "Halts background diagnostic log writing to SSD and frees system RAM."
+            },
+            "chk_OemServices": {
+                "title": "Set Secondary OEM / Diagnostic Services to On-Demand",
+                "desc": "Switches background vendor services (HP, Dell, AnyDesk, WerSvc) to Manual start."
+            },
+            "chk_TasksDebloat": {
+                "title": "Disable Heavy Scheduled Telemetry Tasks (Compatibility Appraiser)",
+                "desc": "Disables periodic background compatibility scanners and error telemetry uploaders."
+            },
+            "chk_SsdLastAccess": {
+                "title": "Optimize SSD File System (Disable LastAccess Timestamps)",
+                "desc": "Eliminates unnecessary disk write operations during routine file read access."
+            },
+            "chk_UiDelay": {
+                "title": "Eliminate UI Menu Delays (MenuShowDelay = 0 / MinAnimate = 0)",
+                "desc": "Makes context menus and Windows interface animations open instantaneously."
+            },
+        }
+    }
+}
 
 # ---------------------------------------------------------------------------
 # Deep State Checking and Optimizer Engine
@@ -310,7 +548,7 @@ class TweaksEngine:
     def apply_win32_priority() -> bool:
         return reg_set_dword(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\PriorityControl", "Win32PrioritySeparation", 38)
 
-    # 8. CSRSS & DWM Priority
+    # 8. CSRSS, DWM & OTD Priority
     @staticmethod
     def check_csrss_dwm() -> str:
         c1 = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\csrss.exe\PerfOptions", "CpuPriorityClass")
@@ -611,13 +849,14 @@ class TweaksEngine:
 
 
 # ---------------------------------------------------------------------------
-# Modern Dark Tkinter GUI
+# Modern Dark Tkinter GUI with Multi-Language Support
 # ---------------------------------------------------------------------------
 class OptimizerApp:
 
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Windows Gaming and Tablet Optimizer")
+        self.lang = "ru"  # Default language
+
         self.root.geometry("980x780")
         self.root.minsize(880, 680)
         self.root.configure(bg="#12141A")
@@ -625,8 +864,14 @@ class OptimizerApp:
         # Set 0.5ms High Resolution Timer immediately
         set_high_resolution_timer(5000)
 
+        self.chk_vars = {}
+        self.badge_labels = {}
+        self.tweak_labels = {}
+        self.tab_frames = {}
+
         self.setup_styles()
         self.create_widgets()
+        self.apply_language()
         self.scan_system()
 
     def setup_styles(self):
@@ -648,64 +893,64 @@ class OptimizerApp:
 
         title_box = tk.Frame(header, bg="#1A1D26")
         title_box.pack(side="left", fill="y")
-        lbl_title = tk.Label(title_box, text="⚡ Windows Gaming and Tablet Optimizer", font=("Segoe UI", 15, "bold"), fg="#00E5FF", bg="#1A1D26")
-        lbl_title.pack(anchor="w")
-        lbl_sub = tk.Label(title_box, text="Интерактивная оптимизация графических планшетов, системных таймеров, сети и FPS", font=("Segoe UI", 9), fg="#8C93A8", bg="#1A1D26")
-        lbl_sub.pack(anchor="w", pady=(2, 0))
+        self.lbl_title = tk.Label(title_box, text="", font=("Segoe UI", 15, "bold"), fg="#00E5FF", bg="#1A1D26")
+        self.lbl_title.pack(anchor="w")
+        self.lbl_sub = tk.Label(title_box, text="", font=("Segoe UI", 9), fg="#8C93A8", bg="#1A1D26")
+        self.lbl_sub.pack(anchor="w", pady=(2, 0))
 
         btn_box = tk.Frame(header, bg="#1A1D26")
         btn_box.pack(side="right")
 
-        btn_scan = tk.Button(btn_box, text="🔍 Сканировать", font=("Segoe UI", 9, "bold"), bg="#263238", fg="#00E5FF", activebackground="#37474F", activeforeground="#00E5FF", relief="flat", padx=12, pady=6, cursor="hand2", command=self.scan_system)
-        btn_scan.pack(side="left", padx=4)
+        self.btn_lang = tk.Button(btn_box, text="🌐 English", font=("Segoe UI", 9, "bold"), bg="#37474F", fg="#ECEFF1", activebackground="#455A64", activeforeground="#FFFFFF", relief="flat", padx=10, pady=6, cursor="hand2", command=self.toggle_language)
+        self.btn_lang.pack(side="left", padx=4)
 
-        btn_sel = tk.Button(btn_box, text="Выбрать все", font=("Segoe UI", 9), bg="#2A2F40", fg="#E0E0E0", activebackground="#37474F", activeforeground="#FFFFFF", relief="flat", padx=10, pady=6, cursor="hand2", command=self.select_all)
-        btn_sel.pack(side="left", padx=4)
+        self.btn_scan = tk.Button(btn_box, text="", font=("Segoe UI", 9, "bold"), bg="#263238", fg="#00E5FF", activebackground="#37474F", activeforeground="#00E5FF", relief="flat", padx=12, pady=6, cursor="hand2", command=self.scan_system)
+        self.btn_scan.pack(side="left", padx=4)
 
-        btn_desel = tk.Button(btn_box, text="Снять все", font=("Segoe UI", 9), bg="#2A2F40", fg="#E0E0E0", activebackground="#37474F", activeforeground="#FFFFFF", relief="flat", padx=10, pady=6, cursor="hand2", command=self.deselect_all)
-        btn_desel.pack(side="left", padx=4)
+        self.btn_sel = tk.Button(btn_box, text="", font=("Segoe UI", 9), bg="#2A2F40", fg="#E0E0E0", activebackground="#37474F", activeforeground="#FFFFFF", relief="flat", padx=10, pady=6, cursor="hand2", command=self.select_all)
+        self.btn_sel.pack(side="left", padx=4)
 
-        btn_apply = tk.Button(btn_box, text="⚡ Применить выбранное", font=("Segoe UI", 9, "bold"), bg="#00C853", fg="#FFFFFF", activebackground="#00E676", activeforeground="#FFFFFF", relief="flat", padx=14, pady=6, cursor="hand2", command=self.apply_tweaks)
-        btn_apply.pack(side="left", padx=4)
+        self.btn_desel = tk.Button(btn_box, text="", font=("Segoe UI", 9), bg="#2A2F40", fg="#E0E0E0", activebackground="#37474F", activeforeground="#FFFFFF", relief="flat", padx=10, pady=6, cursor="hand2", command=self.deselect_all)
+        self.btn_desel.pack(side="left", padx=4)
+
+        self.btn_apply = tk.Button(btn_box, text="", font=("Segoe UI", 9, "bold"), bg="#00C853", fg="#FFFFFF", activebackground="#00E676", activeforeground="#FFFFFF", relief="flat", padx=14, pady=6, cursor="hand2", command=self.apply_tweaks)
+        self.btn_apply.pack(side="left", padx=4)
 
         # Tabbed Container
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill="both", expand=True, padx=16, pady=6)
 
-        self.chk_vars = {}
-        self.badge_labels = {}
-
-        self.tab1 = self.create_tab("🖊️ Планшет и Перо", [
-            ("chk_PenHold", "Отключить задержку касания (HoldMode) и жесты (FlickMode)", "Убирает 300 мс задержки при первом касании пером и буфер жестов Windows Ink.", "status_PenHold"),
-            ("chk_TabletGPO", "Применить Group Policies для планшетов (TabletPC & PenWorkspace)", "Системный запрет на генерацию анимаций кругов (Ripple), зажатия и жестов в HKLM/HKCU.", "status_TabletGPO"),
-            ("chk_LinearCurve", "Обнулить нелинейное сглаживание курсора (1:1 Raw Linear Curve)", "Обнуляет полиномиальные кривые SmoothMouseX/YCurve для абсолютно равномерного движения.", "status_LinearCurve"),
-            ("chk_TouchpadSafety", "Защита тачпада ноутбука (LeaveOnWithMouse = 1 & Taps/Gestures)", "Гарантирует работу тачпада при подключенной мыши/планшете и сохраняет жесты Precision Touchpad.", "status_TouchpadSafety"),
-            ("chk_UsbSuspend", "Отключить энергосбережение USB (Selective Suspend в схеме питания)", "Предотвращает засыпание USB портов, обеспечивая непрерывную частоту опроса 1000Hz.", "status_UsbSuspend"),
+        self.tab1 = self.create_tab("tab1", [
+            ("chk_PenHold", "status_PenHold"),
+            ("chk_TabletGPO", "status_TabletGPO"),
+            ("chk_LinearCurve", "status_LinearCurve"),
+            ("chk_TouchpadSafety", "status_TouchpadSafety"),
+            ("chk_UsbSuspend", "status_UsbSuspend"),
         ])
 
-        self.tab2 = self.create_tab("⚡ Система, CPU и FPS", [
-            ("chk_BcdTimers", "Включить аппаратный таймер TSC и 0.5ms (disabledynamictick yes)", "Устраняет пропуск тиков таймера процессора и переводит Windows на инвариантный таймер TSC (0.5 мс).", "status_BcdTimers"),
-            ("chk_Win32Priority", "Настроить кванты CPU 3:1 в пользу активной игры (Win32PrioritySeparation = 0x26)", "Выделяет активному окну в 3 раза больше времени CPU без прерываний на фоновые службы.", "status_Win32Priority"),
-            ("chk_CsrssDwm", "Повысить приоритеты диспетчера ввода (CSRSS), DWM и OpenTabletDriver", "Переводит csrss.exe, dwm.exe и демон OTD в High Priority для мгновенной доставки аппаратных кликов.", "status_CsrssDwm"),
-            ("chk_GameMode", "Включить Windows Game Mode и отключить GameDVR / GameBar", "Активирует игровой режим Windows и полностью выключает фоновый процесс GameBarPresenceWriter.", "status_GameMode"),
-            ("chk_KeyboardDelay", "Снизить задержку повтора клавиатуры (KeyboardDelay = 0 / Speed = 31)", "Ускоряет регистрацию стримов K1/K2 в osu! и обнуляет время задержки дребезга (BounceTime).", "status_KeyboardDelay"),
-            ("chk_CpuUnpark", "Разблокировать спящие ядра процессора (CPU Core Unparking 100%)", "Запрещает процессору усыплять логические ядра, устраняя 2-5 мс лага пробуждения.", "status_CpuUnpark"),
-            ("chk_KernelRam", "Зафиксировать ядро в RAM и отключить Fast Startup (Чистый старт ОС)", "Включает DisablePagingExecutive = 1 и отключает гибернацию ядра при выключении ПК.", "status_KernelRam"),
-            ("chk_OsuFso", "Принудительный аппаратный Fullscreen Exclusive для osu!.exe", "Отключает 'Оптимизацию во весь экран' для osu! (прямой рендер без буфера DWM).", "status_OsuFso"),
+        self.tab2 = self.create_tab("tab2", [
+            ("chk_BcdTimers", "status_BcdTimers"),
+            ("chk_Win32Priority", "status_Win32Priority"),
+            ("chk_CsrssDwm", "status_CsrssDwm"),
+            ("chk_GameMode", "status_GameMode"),
+            ("chk_KeyboardDelay", "status_KeyboardDelay"),
+            ("chk_CpuUnpark", "status_CpuUnpark"),
+            ("chk_KernelRam", "status_KernelRam"),
+            ("chk_OsuFso", "status_OsuFso"),
         ])
 
-        self.tab3 = self.create_tab("🌐 Сеть и Пинг", [
-            ("chk_Nagle", "Отключить алгоритм Нейгла (TCPNoDelay = 1, TcpAckFrequency = 1)", "Отправляет мелкие пакеты ввода мгновенно без накопления в сетевом буфере.", "status_Nagle"),
-            ("chk_QoS", "Снять 20% системное ограничение пропускной способности (QoS = 0)", "Разблокирует 100% пропускной способности интернет-канала для сетевых игр.", "status_QoS"),
-            ("chk_DeliveryOpt", "Отключить фоновую раздачу обновлений P2P (Delivery Optimization)", "Запрещает Windows раздавать скачанные обновления по локальной сети и интернету.", "status_DeliveryOpt"),
+        self.tab3 = self.create_tab("tab3", [
+            ("chk_Nagle", "status_Nagle"),
+            ("chk_QoS", "status_QoS"),
+            ("chk_DeliveryOpt", "status_DeliveryOpt"),
         ])
 
-        self.tab4 = self.create_tab("🧹 Службы и SSD", [
-            ("chk_Telemetry", "Отключить службу сбора телеметрии (DiagTrack) и SysMain", "Останавливает постоянную запись диагностических логов на SSD и освобождает ОЗУ.", "status_Telemetry"),
-            ("chk_OemServices", "Перевести второстепенные OEM/Служебные процессы в ручной режим", "Переводит фоновые диагностические службы (HP, Dell, AnyDesk, WerSvc) в режим Manual.", "status_OemServices"),
-            ("chk_TasksDebloat", "Отключить тяжелые задачи планировщика (Compatibility Appraiser)", "Отключает периодические фоновые сканеры совместимости и отчеты об ошибках.", "status_TasksDebloat"),
-            ("chk_SsdLastAccess", "Оптимизировать файловую систему SSD (Disable LastAccess Timestamps)", "Отключает лишние операции записи на SSD при обычном чтении файлов (fsutil).", "status_SsdLastAccess"),
-            ("chk_UiDelay", "Убрать искусственные задержки меню (MenuShowDelay = 0 / MinAnimate = 0)", "Делает открытие контекстных меню и отклик окон Windows моментальным.", "status_UiDelay"),
+        self.tab4 = self.create_tab("tab4", [
+            ("chk_Telemetry", "status_Telemetry"),
+            ("chk_OemServices", "status_OemServices"),
+            ("chk_TasksDebloat", "status_TasksDebloat"),
+            ("chk_SsdLastAccess", "status_SsdLastAccess"),
+            ("chk_UiDelay", "status_UiDelay"),
         ])
 
         # Progress bar frame
@@ -715,7 +960,7 @@ class OptimizerApp:
         self.prog_bar = ttk.Progressbar(prog_frame, style="TProgressbar", orient="horizontal", mode="determinate")
         self.prog_bar.pack(side="left", fill="x", expand=True)
 
-        self.lbl_status = tk.Label(prog_frame, text="Готов к работе", font=("Segoe UI", 9), fg="#8C93A8", bg="#12141A")
+        self.lbl_status = tk.Label(prog_frame, text="", font=("Segoe UI", 9), fg="#8C93A8", bg="#12141A")
         self.lbl_status.pack(side="right", padx=(10, 0))
 
         # Console Logger Frame
@@ -729,11 +974,12 @@ class OptimizerApp:
         self.txt_log.tag_config("yellow", foreground="#FFD600")
         self.txt_log.tag_config("red", foreground="#FF5252")
 
-    def create_tab(self, tab_title: str, items: list) -> tk.Frame:
+    def create_tab(self, tab_id: str, items: list) -> tk.Frame:
         tab = tk.Frame(self.notebook, bg="#161922", padx=14, pady=10)
-        self.notebook.add(tab, text=tab_title)
+        self.notebook.add(tab, text="")
+        self.tab_frames[tab_id] = tab
 
-        for key, title, desc, badge_key in items:
+        for key, badge_key in items:
             row = tk.Frame(tab, bg="#1E2230", padx=12, pady=8, highlightbackground="#2A2F40", highlightthickness=1)
             row.pack(fill="x", pady=4)
 
@@ -743,17 +989,52 @@ class OptimizerApp:
             chk_box = tk.Frame(row, bg="#1E2230")
             chk_box.pack(side="left", fill="both", expand=True)
 
-            chk = tk.Checkbutton(chk_box, text=title, variable=var, font=("Segoe UI", 10, "bold"), fg="#E0E0E0", bg="#1E2230", selectcolor="#12141A", activebackground="#1E2230", activeforeground="#FFFFFF", anchor="w")
+            chk = tk.Checkbutton(chk_box, text="", variable=var, font=("Segoe UI", 10, "bold"), fg="#E0E0E0", bg="#1E2230", selectcolor="#12141A", activebackground="#1E2230", activeforeground="#FFFFFF", anchor="w")
             chk.pack(anchor="w")
 
-            lbl_desc = tk.Label(chk_box, text=desc, font=("Segoe UI", 8), fg="#8C93A8", bg="#1E2230", anchor="w")
+            lbl_desc = tk.Label(chk_box, text="", font=("Segoe UI", 8), fg="#8C93A8", bg="#1E2230", anchor="w")
             lbl_desc.pack(anchor="w", padx=(24, 0))
+
+            self.tweak_labels[key] = (chk, lbl_desc)
 
             badge = tk.Label(row, text="[ Не проверено ]", font=("Segoe UI", 9, "bold"), fg="#757575", bg="#1E2230")
             badge.pack(side="right", padx=6)
             self.badge_labels[badge_key] = badge
 
         return tab
+
+    def toggle_language(self):
+        self.lang = "en" if self.lang == "ru" else "ru"
+        self.apply_language()
+        self.scan_system()
+
+    def apply_language(self):
+        L = LOCALIZATION[self.lang]
+
+        # Window & Header
+        self.root.title(L["title"])
+        self.lbl_title.config(text=L["title"])
+        self.lbl_sub.config(text=L["subtitle"])
+        self.btn_lang.config(text=L["btn_lang"])
+        self.btn_scan.config(text=L["btn_scan"])
+        self.btn_sel.config(text=L["btn_sel"])
+        self.btn_desel.config(text=L["btn_desel"])
+        self.btn_apply.config(text=L["btn_apply"])
+        self.lbl_status.config(text=L["status_ready"])
+
+        # Tab titles
+        tabs_L = L["tabs"]
+        self.notebook.tab(0, text=tabs_L["tab1"])
+        self.notebook.tab(1, text=tabs_L["tab2"])
+        self.notebook.tab(2, text=tabs_L["tab3"])
+        self.notebook.tab(3, text=tabs_L["tab4"])
+
+        # Tweak items
+        tweaks_L = L["tweaks"]
+        for key, (chk, desc) in self.tweak_labels.items():
+            if key in tweaks_L:
+                chk.config(text=tweaks_L[key]["title"])
+                desc.config(text=tweaks_L[key]["desc"])
 
     def log(self, msg: str, tag: str = "green"):
         ts = datetime.datetime.now().strftime("%H:%M:%S")
@@ -768,12 +1049,12 @@ class OptimizerApp:
     def select_all(self):
         for v in self.chk_vars.values():
             v.set(True)
-        self.log("Все чекбоксы отмечены.", "cyan")
+        self.log(LOCALIZATION[self.lang]["log_all_selected"], "cyan")
 
     def deselect_all(self):
         for v in self.chk_vars.values():
             v.set(False)
-        self.log("Все чекбоксы сняты.", "yellow")
+        self.log(LOCALIZATION[self.lang]["log_all_deselected"], "yellow")
 
     def format_badge(self, status: str) -> tuple:
         if "Already" in status or "Active" in status or "Safe" in status:
@@ -787,9 +1068,10 @@ class OptimizerApp:
 
     def scan_system(self):
         try:
+            L = LOCALIZATION[self.lang]
             self.txt_log.delete("1.0", tk.END)
-            self.log("=== Запуск предварительного сканирования системы ===", "cyan")
-            self.lbl_status.config(text="Сканирование системы...")
+            self.log(L["log_scan_start"], "cyan")
+            self.lbl_status.config(text=L["status_scanning"])
 
             # 1. Pen Hold
             t, c = self.format_badge(TweaksEngine.check_pen_hold())
@@ -879,17 +1161,18 @@ class OptimizerApp:
             self.set_badge("status_UiDelay", t, c)
 
             self.prog_bar["value"] = 100
-            self.lbl_status.config(text="Сканирование завершено!")
-            self.log("[V] Сканирование успешно завершено. Все модули проверены.", "green")
+            self.lbl_status.config(text=L["status_done"])
+            self.log(L["log_scan_done"], "green")
         except Exception as e:
             log_exception(e, "scan_system")
-            self.log(f"[!] Ошибка сканирования: {e}", "red")
+            self.log(f"[!] Error: {e}", "red")
 
     def apply_tweaks(self):
         try:
+            L = LOCALIZATION[self.lang]
             self.txt_log.delete("1.0", tk.END)
-            self.log("=== Применение выбранных оптимизаций ===", "cyan")
-            self.lbl_status.config(text="Применение твиков...")
+            self.log(L["log_apply_start"], "cyan")
+            self.lbl_status.config(text=L["status_applying"])
             self.prog_bar["value"] = 0
 
             total = 21
@@ -899,159 +1182,159 @@ class OptimizerApp:
             if self.chk_vars["chk_PenHold"].get():
                 TweaksEngine.apply_pen_hold()
                 self.set_badge("status_PenHold", "[ Already Applied ]", "#00E676")
-                self.log("[OK] Windows Ink HoldMode и FlickMode отключены.")
+                self.log("[OK] HoldMode & FlickMode disabled.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 2. Tablet GPO
             if self.chk_vars["chk_TabletGPO"].get():
                 TweaksEngine.apply_tablet_gpo()
                 self.set_badge("status_TabletGPO", "[ Already Applied ]", "#00E676")
-                self.log("[OK] Group Policies TabletPC и PenWorkspace применены.")
+                self.log("[OK] Group Policies TabletPC & PenWorkspace applied.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 3. Linear Curve
             if self.chk_vars["chk_LinearCurve"].get():
                 TweaksEngine.apply_linear_curve()
                 self.set_badge("status_LinearCurve", "[ Already Applied (1:1 Raw) ]", "#00E676")
-                self.log("[OK] Нелинейное сглаживание курсора обнулено (1:1 Raw).")
+                self.log("[OK] Cursor polynomial curve reset (1:1 Raw).")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 4. Touchpad Safety
             if self.chk_vars["chk_TouchpadSafety"].get():
                 TweaksEngine.apply_touchpad_safety()
                 self.set_badge("status_TouchpadSafety", "[ Touchpad Safe (Active) ]", "#00E676")
-                self.log("[OK] Настройки тачпада и жестов Precision TouchPad защищены.")
+                self.log("[OK] Precision TouchPad LeaveOnWithMouse & gestures safe.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 5. USB Suspend
             if self.chk_vars["chk_UsbSuspend"].get():
                 TweaksEngine.apply_usb_suspend()
                 self.set_badge("status_UsbSuspend", "[ Already Disabled ]", "#00E676")
-                self.log("[OK] USB Selective Suspend в схеме электропитания отключен.")
+                self.log("[OK] USB Selective Suspend disabled.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 6. BCD Timers & 0.5ms Timer Resolution
             if self.chk_vars["chk_BcdTimers"].get():
                 TweaksEngine.apply_bcd_timers()
                 self.set_badge("status_BcdTimers", "[ Active (TSC & 0.5ms) ]", "#00E676")
-                self.log("[OK] BCD таймеры: disabledynamictick yes / useplatformclock no + 0.5ms Timer.")
+                self.log("[OK] Invariant TSC & 0.5ms timer locked.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 7. Win32Priority
             if self.chk_vars["chk_Win32Priority"].get():
                 TweaksEngine.apply_win32_priority()
                 self.set_badge("status_Win32Priority", "[ Active (0x26) ]", "#00E676")
-                self.log("[OK] Win32PrioritySeparation = 0x26 (38) выставлен.")
+                self.log("[OK] Win32PrioritySeparation = 0x26 (38) applied.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 8. CSRSS, DWM & OTD Priority
             if self.chk_vars["chk_CsrssDwm"].get():
                 TweaksEngine.apply_csrss_dwm()
                 self.set_badge("status_CsrssDwm", "[ Already Applied (High) ]", "#00E676")
-                self.log("[OK] CSRSS, DWM и OpenTabletDriver переведены в High Priority.")
+                self.log("[OK] CSRSS, DWM & OpenTabletDriver set to High Priority.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 9. GameMode
             if self.chk_vars["chk_GameMode"].get():
                 TweaksEngine.apply_gamemode()
                 self.set_badge("status_GameMode", "[ Already Applied ]", "#00E676")
-                self.log("[OK] Game Mode включен, GameDVR / PresenceWriter отключены.")
+                self.log("[OK] Game Mode enabled, GameDVR disabled.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 10. Keyboard Delay
             if self.chk_vars["chk_KeyboardDelay"].get():
                 TweaksEngine.apply_keyboard_delay()
                 self.set_badge("status_KeyboardDelay", "[ Already Applied (0 / 31) ]", "#00E676")
-                self.log("[OK] KeyboardDelay = 0 / Speed = 31 выставлены.")
+                self.log("[OK] KeyboardDelay = 0 / Speed = 31 set.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 11. CPU Unpark
             if self.chk_vars["chk_CpuUnpark"].get():
                 TweaksEngine.apply_cpu_unpark()
                 self.set_badge("status_CpuUnpark", "[ Already Applied (100%) ]", "#00E676")
-                self.log("[OK] CPU Core Unparking (100% активных ядер) включен.")
+                self.log("[OK] CPU Core Unparking (100%) applied.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 12. Kernel RAM
             if self.chk_vars["chk_KernelRam"].get():
                 TweaksEngine.apply_kernel_ram()
                 self.set_badge("status_KernelRam", "[ Already Applied ]", "#00E676")
-                self.log("[OK] Ядро зафиксировано в RAM, Fast Startup отключен.")
+                self.log("[OK] Kernel locked in RAM, Fast Startup disabled.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 13. Osu FSO
             if self.chk_vars["chk_OsuFso"].get():
                 if TweaksEngine.apply_osu_fso():
                     self.set_badge("status_OsuFso", "[ Already Applied ]", "#00E676")
-                    self.log("[OK] Hardware Exclusive Fullscreen настроен для osu!.exe")
+                    self.log("[OK] Hardware Exclusive Fullscreen set for osu!.exe")
                 else:
-                    self.set_badge("status_OsuFso", "[ Пропущено (N/A) ]", "#757575")
-                    self.log("[WARN] osu!.exe не найден в стандартных путях.", "yellow")
+                    self.set_badge("status_OsuFso", "[ N/A ]", "#757575")
+                    self.log("[WARN] osu!.exe not found.", "yellow")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 14. Nagle
             if self.chk_vars["chk_Nagle"].get():
                 cnt = TweaksEngine.apply_nagle()
                 self.set_badge("status_Nagle", f"[ Already Applied ({cnt}) ]", "#00E676")
-                self.log(f"[OK] Алгоритм Нейгла отключен на {cnt} интерфейсах.")
+                self.log(f"[OK] Nagle's algorithm disabled on {cnt} adapters.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 15. QoS
             if self.chk_vars["chk_QoS"].get():
                 TweaksEngine.apply_qos()
                 self.set_badge("status_QoS", "[ Already Applied (100%) ]", "#00E676")
-                self.log("[OK] 100% QoS канала разблокировано.")
+                self.log("[OK] 100% QoS bandwidth unlocked.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 16. Delivery Opt
             if self.chk_vars["chk_DeliveryOpt"].get():
                 TweaksEngine.apply_delivery_opt()
                 self.set_badge("status_DeliveryOpt", "[ Already Applied ]", "#00E676")
-                self.log("[OK] Delivery Optimization P2P отключена.")
+                self.log("[OK] Delivery Optimization P2P disabled.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 17. Telemetry
             if self.chk_vars["chk_Telemetry"].get():
                 TweaksEngine.apply_telemetry()
                 self.set_badge("status_Telemetry", "[ Already Disabled ]", "#00E676")
-                self.log("[OK] DiagTrack и SysMain отключены.")
+                self.log("[OK] DiagTrack & SysMain disabled.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 18. OEM Services
             if self.chk_vars["chk_OemServices"].get():
                 cnt = TweaksEngine.apply_oem_services()
                 self.set_badge("status_OemServices", f"[ Already Optimized ({cnt}) ]", "#00E676")
-                self.log(f"[OK] OEM службы ({cnt} шт.) переведены в ручной режим.")
+                self.log(f"[OK] OEM services ({cnt}) set to on-demand.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 19. Tasks Debloat
             if self.chk_vars["chk_TasksDebloat"].get():
                 cnt = TweaksEngine.apply_tasks_debloat()
                 self.set_badge("status_TasksDebloat", f"[ Already Disabled ({cnt}) ]", "#00E676")
-                self.log(f"[OK] Отключено {cnt} тяжелых задач планировщика.")
+                self.log(f"[OK] Disabled {cnt} heavy scheduled tasks.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 20. SSD LastAccess
             if self.chk_vars["chk_SsdLastAccess"].get():
                 TweaksEngine.apply_ssd_last_access()
                 self.set_badge("status_SsdLastAccess", "[ Already Applied ]", "#00E676")
-                self.log("[OK] DisableLastAccess = 1 для SSD применен.")
+                self.log("[OK] DisableLastAccess = 1 applied.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 21. UI Delay
             if self.chk_vars["chk_UiDelay"].get():
                 TweaksEngine.apply_ui_delay()
                 self.set_badge("status_UiDelay", "[ Already Applied (0ms) ]", "#00E676")
-                self.log("[OK] Задержка интерфейса MenuShowDelay = 0 установлена.")
+                self.log("[OK] MenuShowDelay = 0 applied.")
             step += 1; self.prog_bar["value"] = 100
 
-            self.lbl_status.config(text="Готово! Все твики применены.")
+            self.lbl_status.config(text=L["status_done"])
             self.log("=====================================================", "cyan")
-            self.log("[V] ВСЕ ОПТИМИЗАЦИИ ПРИМЕНЕНЫ! Рекомендуется перезагрузить ПК.", "green")
-            messagebox.showinfo("Готово", "Все выбранные оптимизации успешно применены!\n\nРекомендуется перезагрузить компьютер.")
+            self.log(L["log_apply_done"], "green")
+            messagebox.showinfo(L["msg_done_title"], L["msg_done_body"])
         except Exception as e:
             log_exception(e, "apply_tweaks")
-            self.log(f"[!] Ошибка при применении твиков: {e}", "red")
+            self.log(f"[!] Error applying tweaks: {e}", "red")
 
 
 # ---------------------------------------------------------------------------
