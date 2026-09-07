@@ -24,9 +24,9 @@ try {
     Set-ItemProperty -Path $sysEvent -Name "FlickMode" -Value 0 -Type DWord -Force
     Set-ItemProperty -Path $sysEvent -Name "HoldMode" -Value 0 -Type DWord -Force
     Set-ItemProperty -Path $sysEvent -Name "Splash" -Value 0 -Type DWord -Force
-    Set-ItemProperty -Path $sysEvent -Name "DblTime" -Value 0 -Type DWord -Force
-    Set-ItemProperty -Path $sysEvent -Name "DblDist" -Value 0 -Type DWord -Force
     Set-ItemProperty -Path $sysEvent -Name "WaitTime" -Value 0 -Type DWord -Force
+    Remove-ItemProperty -Path $sysEvent -Name "DblTime" -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path $sysEvent -Name "DblDist" -ErrorAction SilentlyContinue
 
     $touch = "HKCU:\Software\Microsoft\Wisp\Touch"
     if (-not (Test-Path $touch)) { New-Item -Path $touch -Force | Out-Null }

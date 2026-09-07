@@ -7,3 +7,12 @@ $RECYCLE.BIN/
 # Logs
 *.log
 *.tmp
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec

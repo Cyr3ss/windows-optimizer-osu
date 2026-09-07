@@ -158,8 +158,18 @@ class TweaksEngine:
     def apply_pen_hold() -> bool:
         r1 = winreg.HKEY_CURRENT_USER
         p1 = r"Software\Microsoft\Wisp\Pen\SysEventParameters"
-        for k in ["FlickMode", "HoldMode", "Splash", "DblTime", "DblDist", "WaitTime"]:
+        for k in ["FlickMode", "HoldMode", "Splash", "WaitTime"]:
             reg_set_dword(r1, p1, k, 0)
+        try:
+            key = winreg.OpenKey(r1, p1, 0, winreg.KEY_SET_VALUE | winreg.KEY_WOW64_64KEY)
+            for bad_k in ["DblTime", "DblDist"]:
+                try:
+                    winreg.DeleteValue(key, bad_k)
+                except FileNotFoundError:
+                    pass
+            winreg.CloseKey(key)
+        except Exception:
+            pass
         p2 = r"Software\Microsoft\Wisp\Touch"
         for k in ["TouchMode_hold", "TouchModeN_HoldTime_BeforeAnimation", "TouchModeN_HoldTime_Animation"]:
             reg_set_dword(r1, p2, k, 0)
@@ -198,6 +208,11 @@ class TweaksEngine:
         zero_curve = bytes([0] * 40)
         reg_set_binary(winreg.HKEY_CURRENT_USER, r"Control Panel\Mouse", "SmoothMouseXCurve", zero_curve)
         reg_set_binary(winreg.HKEY_CURRENT_USER, r"Control Panel\Mouse", "SmoothMouseYCurve", zero_curve)
+        dh = reg_get_str(winreg.HKEY_CURRENT_USER, r"Control Panel\Mouse", "DoubleClickHeight")
+        if not dh or dh == "0":
+            reg_set_string(winreg.HKEY_CURRENT_USER, r"Control Panel\Mouse", "DoubleClickHeight", "4")
+            reg_set_string(winreg.HKEY_CURRENT_USER, r"Control Panel\Mouse", "DoubleClickWidth", "4")
+            reg_set_string(winreg.HKEY_CURRENT_USER, r"Control Panel\Mouse", "DoubleClickSpeed", "500")
         return True
 
     # 4. Touchpad & Touch System Safety Check
@@ -213,9 +228,9 @@ class TweaksEngine:
     def apply_touchpad_safety() -> bool:
         # Guarantee Touchpad is never disabled when mouse/tablet is connected
         reg_set_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad", "LeaveOnWithMouse", 1)
-        reg_set_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad", "TapsEnabled", 4294967295)
-        reg_set_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad", "PanEnabled", 4294967295)
-        reg_set_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad", "ZoomEnabled", 4294967295)
+        reg_set_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad", "TapsEnabled", 1)
+        reg_set_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad", "PanEnabled", 1)
+        reg_set_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad", "ZoomEnabled", 1)
         reg_set_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad\Status", "Enabled", 1)
         reg_set_dword(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Wisp\Touch", "TouchUI", 1)
 

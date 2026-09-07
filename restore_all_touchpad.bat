@@ -43,9 +43,9 @@ reg add "HKCU\Software\Microsoft\Wisp\Touch" /v "TouchUI" /t REG_DWORD /d 1 /f
 :: 4. Force Precision Touchpad Enable and LeaveOnWithMouse
 echo [*] 4. Enabling Precision Touchpad...
 reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad" /v "LeaveOnWithMouse" /t REG_DWORD /d 1 /f
-reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad" /v "TapsEnabled" /t REG_DWORD /d 4294967295 /f
-reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad" /v "PanEnabled" /t REG_DWORD /d 4294967295 /f
-reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad" /v "ZoomEnabled" /t REG_DWORD /d 4294967295 /f
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad" /v "TapsEnabled" /t REG_DWORD /d 1 /f
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad" /v "PanEnabled" /t REG_DWORD /d 1 /f
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad" /v "ZoomEnabled" /t REG_DWORD /d 1 /f
 reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad\Status" /v "Enabled" /t REG_DWORD /d 1 /f
 
 :: 5. Restore Default SmoothMouse Curve
