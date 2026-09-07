@@ -496,22 +496,33 @@ class TweaksEngine:
     def check_usb_suspend() -> str:
         active = get_active_power_scheme()
         if active:
-            p = rf"SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\{active}\2a737441-1930-4402-9177-b06418304ddf\48e6b7a6-50f5-4782-a5d4-53bb8f07e226"
-            val = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, p, "ACSettingIndex")
-            if val == 0:
-                return "Already Disabled"
+            subgroups = [
+                "2a737441-1930-4402-8d77-b2bebba308a3",  # Modern / OEM
+                "2a737441-1930-4402-9177-b06418304ddf"   # Generic Windows
+            ]
+            for sg in subgroups:
+                p = rf"SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\{active}\{sg}\48e6b7a6-50f5-4782-a5d4-53bb8f07e226"
+                val = reg_get_dword(winreg.HKEY_LOCAL_MACHINE, p, "ACSettingIndex")
+                if val == 0:
+                    return "Already Disabled"
         return "Available"
 
     @staticmethod
     def apply_usb_suspend() -> bool:
         active = get_active_power_scheme()
+        subgroups = [
+            "2a737441-1930-4402-8d77-b2bebba308a3",
+            "2a737441-1930-4402-9177-b06418304ddf"
+        ]
         if active:
-            p = rf"SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\{active}\2a737441-1930-4402-9177-b06418304ddf\48e6b7a6-50f5-4782-a5d4-53bb8f07e226"
-            reg_set_dword(winreg.HKEY_LOCAL_MACHINE, p, "ACSettingIndex", 0)
-            reg_set_dword(winreg.HKEY_LOCAL_MACHINE, p, "DCSettingIndex", 0)
+            for sg in subgroups:
+                p = rf"SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\{active}\{sg}\48e6b7a6-50f5-4782-a5d4-53bb8f07e226"
+                reg_set_dword(winreg.HKEY_LOCAL_MACHINE, p, "ACSettingIndex", 0)
+                reg_set_dword(winreg.HKEY_LOCAL_MACHINE, p, "DCSettingIndex", 0)
 
-        run_cmd("powercfg /setacvalueindex SCHEME_CURRENT 2a737441-1930-4402-9177-b06418304ddf 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0")
-        run_cmd("powercfg /setdcvalueindex SCHEME_CURRENT 2a737441-1930-4402-9177-b06418304ddf 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0")
+        for sg in subgroups:
+            run_cmd(f"powercfg /setacvalueindex SCHEME_CURRENT {sg} 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0")
+            run_cmd(f"powercfg /setdcvalueindex SCHEME_CURRENT {sg} 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0")
         run_cmd("powercfg /setactive SCHEME_CURRENT")
         return True
 
