@@ -1,17 +1,17 @@
 @echo off
-title Laptop Touchpad & Input Subsystem Emergency Recovery
+title Laptop Touchpad and Input Subsystem Emergency Recovery
 cd /d "%~dp0"
 
 :: Check Administrator Privileges and auto-elevate
 net session >nul 2>&1
 if %errorLevel% neq 0 (
-    echo [*] Requesting Administrator Privileges (UAC)...
+    echo [*] Requesting Administrator Privileges [UAC]...
     powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c cd /d `\"%~dp0`\" ^& \"%~dpnx0\"' -Verb RunAs"
     exit /b
 )
 
 echo =================================================================
-echo   RESTORING LAPTOP TOUCHPAD, SERVICES & POLICIES...
+echo   RESTORING LAPTOP TOUCHPAD, SERVICES AND POLICIES...
 echo =================================================================
 echo.
 
@@ -34,7 +34,7 @@ sc.exe start "HPSysInfoCap"
 sc.exe config "HPDiagsCap" start= demand
 sc.exe config "HPNetworkCap" start= demand
 
-:: 3. Restore Wisp Touch & Pen parameters
+:: 3. Restore Wisp Touch and Pen parameters
 echo [*] 3. Restoring Windows Touch and Pen subsystem...
 reg delete "HKCU\Software\Microsoft\Wisp\Pen\SysEventParameters" /f 2>nul
 reg delete "HKCU\Software\Microsoft\Wisp\Touch" /f 2>nul
@@ -59,7 +59,7 @@ powershell.exe -NoProfile -Command "Get-PnpDevice | Where-Object { $_.InstanceId
 
 echo.
 echo =================================================================
-echo [V] SUCCESS! Touchpad restored. If needed, press Fn+F11 (or HP Touchpad key).
+echo [V] SUCCESS! Touchpad restored. If needed, press Fn+F11 or HP Touchpad key.
 echo =================================================================
 echo.
 pause

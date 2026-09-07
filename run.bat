@@ -1,21 +1,24 @@
 @echo off
-title Windows Gaming & Tablet Optimizer
+title Windows Gaming and Tablet Optimizer
 cd /d "%~dp0"
 
-:: Check if Python is installed
+:: 1. Check if Python is installed
 python --version >nul 2>&1
 if %errorLevel% neq 0 (
-    echo [!] Python 3 is not installed or not added to PATH.
-    echo [*] Please install Python 3 (3.8+) or use the compiled dist\WindowsOptimizer.exe
+    echo [!] Python 3 is not found in PATH.
+    echo [*] Please install Python 3 or run the compiled executable from dist\WindowsOptimizer.exe
     echo.
     pause
     exit /b 1
 )
 
-:: Launch Python Optimizer
-python optimizer.py
+:: 2. Launch Optimizer Application
+python "%~dp0optimizer.py"
 if %errorLevel% neq 0 (
     echo.
-    echo [!] Application closed with an error code. Check optimizer_error.log
+    echo [!] Application exited with code %errorLevel%.
+    if exist "%~dp0optimizer_error.log" (
+        echo [*] Details logged to optimizer_error.log
+    )
     pause
 )
