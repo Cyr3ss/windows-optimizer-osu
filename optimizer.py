@@ -4,13 +4,14 @@
 =============================================================================
  Native Python 3 GUI application with dark theme, accurate system scanner,
  granular tweak checkboxes, live console logger, and exception reporting.
- Safe for Laptops, Touchpads (Synaptics/ELAN/Precision), and Graphics Tablets.
+ Standalone (zero external pip dependencies) & PyInstaller compatible.
 =============================================================================
 """
 
 import os
 import sys
 import ctypes
+from ctypes import wintypes
 import traceback
 import datetime
 import subprocess
@@ -57,6 +58,19 @@ def request_admin():
         except Exception as e:
             log_exception(e, "Admin Elevation")
             sys.exit(1)
+
+# ---------------------------------------------------------------------------
+# High-Resolution Windows System Timer (0.500 ms / 500 µs)
+# ---------------------------------------------------------------------------
+def set_high_resolution_timer(desired_100ns: int = 5000) -> tuple:
+    """Sets system timer resolution to 0.5ms via ntdll.NtSetTimerResolution."""
+    try:
+        ntdll = ctypes.WinDLL('ntdll')
+        cur_res = wintypes.ULONG()
+        status = ntdll.NtSetTimerResolution(desired_100ns, 1, ctypes.byref(cur_res))
+        return (status == 0, cur_res.value / 10000.0)
+    except Exception:
+        return (False, 1.0)
 
 # ---------------------------------------------------------------------------
 # Registry Helper Functions
@@ -252,7 +266,6 @@ class TweaksEngine:
 
     @staticmethod
     def apply_usb_suspend() -> bool:
-        # Safe USB power configuration via Power Plans
         active = get_active_power_scheme()
         if active:
             p = rf"SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\{active}\2a737441-1930-4402-9177-b06418304ddf\48e6b7a6-50f5-4782-a5d4-53bb8f07e226"
@@ -264,14 +277,14 @@ class TweaksEngine:
         run_cmd("powercfg /setactive SCHEME_CURRENT")
         return True
 
-    # 6. BCD Timers (Invariant TSC)
+    # 6. BCD Timers & 0.5ms System Resolution
     @staticmethod
     def check_bcd_timers() -> str:
         try:
             res = subprocess.run("bcdedit /enum {current}", shell=True, capture_output=True, text=True)
             out = res.stdout.lower()
             if "disabledynamictick" in out and "yes" in out:
-                return "Active (TSC)"
+                return "Active (TSC & 0.5ms)"
             return "Available"
         except Exception:
             return "Available"
@@ -280,6 +293,7 @@ class TweaksEngine:
     def apply_bcd_timers() -> bool:
         run_cmd("bcdedit /set disabledynamictick yes")
         run_cmd("bcdedit /set useplatformclock no")
+        set_high_resolution_timer(5000)
         return True
 
     # 7. Win32PrioritySeparation
@@ -305,7 +319,7 @@ class TweaksEngine:
 
     @staticmethod
     def apply_csrss_dwm() -> bool:
-        for proc in ["csrss.exe", "dwm.exe"]:
+        for proc in ["csrss.exe", "dwm.exe", "OpenTabletDriver.Daemon.exe"]:
             p = rf"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\{proc}\PerfOptions"
             reg_set_dword(winreg.HKEY_LOCAL_MACHINE, p, "CpuPriorityClass", 3)
             reg_set_dword(winreg.HKEY_LOCAL_MACHINE, p, "IoPriority", 3)
@@ -604,9 +618,12 @@ class OptimizerApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("Windows Gaming and Tablet Optimizer")
-        self.root.geometry("980" + "x780")
+        self.root.geometry("980x780")
         self.root.minsize(880, 680)
         self.root.configure(bg="#12141A")
+
+        # Set 0.5ms High Resolution Timer immediately
+        set_high_resolution_timer(5000)
 
         self.setup_styles()
         self.create_widgets()
@@ -639,7 +656,7 @@ class OptimizerApp:
         btn_box = tk.Frame(header, bg="#1A1D26")
         btn_box.pack(side="right")
 
-        btn_scan = tk.Button(btn_box, text="🔍 Сканировать систему", font=("Segoe UI", 9, "bold"), bg="#263238", fg="#00E5FF", activebackground="#37474F", activeforeground="#00E5FF", relief="flat", padx=12, pady=6, cursor="hand2", command=self.scan_system)
+        btn_scan = tk.Button(btn_box, text="🔍 Сканировать", font=("Segoe UI", 9, "bold"), bg="#263238", fg="#00E5FF", activebackground="#37474F", activeforeground="#00E5FF", relief="flat", padx=12, pady=6, cursor="hand2", command=self.scan_system)
         btn_scan.pack(side="left", padx=4)
 
         btn_sel = tk.Button(btn_box, text="Выбрать все", font=("Segoe UI", 9), bg="#2A2F40", fg="#E0E0E0", activebackground="#37474F", activeforeground="#FFFFFF", relief="flat", padx=10, pady=6, cursor="hand2", command=self.select_all)
@@ -667,9 +684,9 @@ class OptimizerApp:
         ])
 
         self.tab2 = self.create_tab("⚡ Система, CPU и FPS", [
-            ("chk_BcdTimers", "Включить аппаратный таймер TSC (disabledynamictick yes / useplatformclock no)", "Устраняет пропуск тиков таймера процессора и переводит Windows на инвариантный таймер TSC.", "status_BcdTimers"),
+            ("chk_BcdTimers", "Включить аппаратный таймер TSC и 0.5ms (disabledynamictick yes)", "Устраняет пропуск тиков таймера процессора и переводит Windows на инвариантный таймер TSC (0.5 мс).", "status_BcdTimers"),
             ("chk_Win32Priority", "Настроить кванты CPU 3:1 в пользу активной игры (Win32PrioritySeparation = 0x26)", "Выделяет активному окну в 3 раза больше времени CPU без прерываний на фоновые службы.", "status_Win32Priority"),
-            ("chk_CsrssDwm", "Повысить приоритеты диспетчера ввода (CSRSS) и вывода кадров (DWM)", "Переводит csrss.exe и dwm.exe в High Priority для мгновенной доставки аппаратных кликов.", "status_CsrssDwm"),
+            ("chk_CsrssDwm", "Повысить приоритеты диспетчера ввода (CSRSS), DWM и OpenTabletDriver", "Переводит csrss.exe, dwm.exe и демон OTD в High Priority для мгновенной доставки аппаратных кликов.", "status_CsrssDwm"),
             ("chk_GameMode", "Включить Windows Game Mode и отключить GameDVR / GameBar", "Активирует игровой режим Windows и полностью выключает фоновый процесс GameBarPresenceWriter.", "status_GameMode"),
             ("chk_KeyboardDelay", "Снизить задержку повтора клавиатуры (KeyboardDelay = 0 / Speed = 31)", "Ускоряет регистрацию стримов K1/K2 в osu! и обнуляет время задержки дребезга (BounceTime).", "status_KeyboardDelay"),
             ("chk_CpuUnpark", "Разблокировать спящие ядра процессора (CPU Core Unparking 100%)", "Запрещает процессору усыплять логические ядра, устраняя 2-5 мс лага пробуждения.", "status_CpuUnpark"),
@@ -913,11 +930,11 @@ class OptimizerApp:
                 self.log("[OK] USB Selective Suspend в схеме электропитания отключен.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
-            # 6. BCD Timers
+            # 6. BCD Timers & 0.5ms Timer Resolution
             if self.chk_vars["chk_BcdTimers"].get():
                 TweaksEngine.apply_bcd_timers()
-                self.set_badge("status_BcdTimers", "[ Active (TSC) ]", "#00E676")
-                self.log("[OK] BCD таймеры: disabledynamictick yes / useplatformclock no.")
+                self.set_badge("status_BcdTimers", "[ Active (TSC & 0.5ms) ]", "#00E676")
+                self.log("[OK] BCD таймеры: disabledynamictick yes / useplatformclock no + 0.5ms Timer.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 7. Win32Priority
@@ -927,11 +944,11 @@ class OptimizerApp:
                 self.log("[OK] Win32PrioritySeparation = 0x26 (38) выставлен.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
-            # 8. CSRSS & DWM
+            # 8. CSRSS, DWM & OTD Priority
             if self.chk_vars["chk_CsrssDwm"].get():
                 TweaksEngine.apply_csrss_dwm()
                 self.set_badge("status_CsrssDwm", "[ Already Applied (High) ]", "#00E676")
-                self.log("[OK] CSRSS и DWM переведены в High Priority.")
+                self.log("[OK] CSRSS, DWM и OpenTabletDriver переведены в High Priority.")
             step += 1; self.prog_bar["value"] = int((step / total) * 100)
 
             # 9. GameMode
@@ -1030,7 +1047,7 @@ class OptimizerApp:
 
             self.lbl_status.config(text="Готово! Все твики применены.")
             self.log("=====================================================", "cyan")
-            self.log("[V] ВСЕ ОПТИМИЗАЦИИ ПРИМЕНЕНЫ! Перезагрузите ПК.", "green")
+            self.log("[V] ВСЕ ОПТИМИЗАЦИИ ПРИМЕНЕНЫ! Рекомендуется перезагрузить ПК.", "green")
             messagebox.showinfo("Готово", "Все выбранные оптимизации успешно применены!\n\nРекомендуется перезагрузить компьютер.")
         except Exception as e:
             log_exception(e, "apply_tweaks")

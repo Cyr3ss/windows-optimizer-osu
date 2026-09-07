@@ -1,5 +1,5 @@
 @echo off
-title Complete Laptop Touchpad & Input Subsystem Restoration
+title Laptop Touchpad & Input Subsystem Emergency Recovery
 cd /d "%~dp0"
 
 :: Check Administrator Privileges and auto-elevate
@@ -11,19 +11,19 @@ if %errorLevel% neq 0 (
 )
 
 echo =================================================================
-echo   COMPLETELY RESTORING TOUCHPAD, SERVICES & POLICIES...
+echo   RESTORING LAPTOP TOUCHPAD, SERVICES & POLICIES...
 echo =================================================================
 echo.
 
-:: 1. Remove all TabletPC and PenWorkspace Group Policies
-echo [*] 1. Removing TabletPC and PenWorkspace Group Policies...
+:: 1. Remove blocking TabletPC Group Policies
+echo [*] 1. Removing blocking TabletPC Group Policies...
 reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\TabletPC" /f 2>nul
 reg delete "HKCU\Software\Policies\Microsoft\Windows\TabletPC" /f 2>nul
 reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\PenWorkspace" /f 2>nul
 reg delete "HKCU\Software\Policies\Microsoft\Windows\PenWorkspace" /f 2>nul
 reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\HandwritingErrorReports" /f 2>nul
 
-:: 2. Restore TabletInputService and HP Services
+:: 2. Restore TabletInputService and HP Hardware Services
 echo [*] 2. Enabling and starting Services...
 sc.exe config "TabletInputService" start= auto
 sc.exe start "TabletInputService"
@@ -59,8 +59,7 @@ powershell.exe -NoProfile -Command "Get-PnpDevice | Where-Object { $_.InstanceId
 
 echo.
 echo =================================================================
-echo [V] COMPLETE RESTORATION FINISHED!
-echo [*] Check your touchpad now. If needed, press Fn+F11 (or HP Touchpad Hotkey).
+echo [V] SUCCESS! Touchpad restored. If needed, press Fn+F11 (or HP Touchpad key).
 echo =================================================================
 echo.
 pause

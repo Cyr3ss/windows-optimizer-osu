@@ -13,59 +13,41 @@
 <a name="-english"></a>
 ## 🇬🇧 English
 
-A comprehensive, modular, and safe Windows 10/11 optimization suite designed to eliminate input lag, unlock 1000Hz hardware responsiveness for graphics tablets, tune system timers, optimize network traffic, and debloat intrusive background telemetry — with full protection for laptop touchpads (Synaptics / ELAN / Precision Touchpads).
+A modern, standalone, and safe Windows 10/11 optimization suite designed to eliminate input lag, unlock 1000Hz hardware responsiveness for graphics tablets, tune system timers to 0.5ms, optimize network traffic, and debloat intrusive background telemetry — with built-in protection for laptop touchpads (Synaptics / ELAN / Precision Touchpads).
 
 ---
 
-### ✨ Architecture & Key Components
+### ✨ Architecture & Clean File Structure
 
 ```text
-├── optimizer.py                       # 🐍 Standalone Native Python 3 Dark GUI (Standard Library Only)
-├── build_exe.bat                      # 📦 1-Click PyInstaller Builder -> dist\WindowsOptimizer.exe
-├── run_python_gui.bat                 # 🚀 Fast Python GUI Launcher
-├── timer_res.py                       # ⏱️ 0.500 ms (500 µs) High-Precision Windows System Timer Lock
-├── fix_touchpad.bat                   # 🩹 Quick Touchpad & HP Hardware Services Fix
-├── restore_all_touchpad.bat           # 🛡️ Full Touchpad & Input Subsystem Recovery Tool
-├── launch_gui.bat                     # 📜 Legacy PowerShell WPF GUI Launcher (Auto-Admin)
-├── optimizer_gui.ps1                  # 📜 Legacy PowerShell WPF GUI Interface
-├── apply_all_tweaks.ps1               # ⚡ 1-Click PowerShell CLI Master Runner
-├── scripts/
-│   ├── 01_tablet_pen_latency.ps1      # 🖊️ Pen Hold/Flick, 1:1 Raw Curve, Tablet Policies & Touchpad Safety
-│   ├── 02_gaming_system_latency.ps1   # ⚡ Invariant TSC BCD Timers, Win32Priority 0x26, CSRSS/DWM, Game Mode
-│   ├── 03_network_ping_tweaks.ps1     # 🌐 Low Ping Tweaks (TCPNoDelay, TcpAckFrequency, 0% QoS Throttling)
-│   └── 04_debloat_services_tasks.ps1  # 🧹 DiagTrack, SysMain, OEM Services, Compatibility Tasks, SSD LastAccess
-└── README.md                          # 📖 Bilingual Documentation
+windows-optimizer-osu/
+├── optimizer.py             # 🐍 Standalone Native Python 3 Dark GUI (Standard Library Only, 0.5ms Timer)
+├── run.bat                  # 🚀 1-Click Fast Launcher
+├── build_exe.bat            # 📦 1-Click PyInstaller Builder -> dist\WindowsOptimizer.exe
+├── restore_touchpad.bat     # 🛡️ Emergency Touchpad & Input Recovery Tool (Auto-UAC)
+├── .gitignore               # ⚙️ Git Ignore Rules
+└── README.md                # 📖 Bilingual Documentation
 ```
 
 ---
 
 ### 🚀 Getting Started
 
-#### 1. Native Python GUI (Recommended)
-Run directly with Python (requires **zero external pip dependencies**):
-```bat
-run_python_gui.bat
-```
-*or execute directly:* `python optimizer.py`
+#### 1. Fast Launch (Recommended)
+Double-click **`run.bat`** (or run `python optimizer.py`).
+> **Note:** Requires Python 3.8+. Uses standard library only (**zero pip packages required**).
 
 #### 2. Standalone `.exe` Compilation (PyInstaller)
-Compile `optimizer.py` into a portable, single-file executable with embedded Administrator UAC privileges:
+Compile `optimizer.py` into a portable, single-file binary with embedded Administrator UAC manifest:
 ```bat
 build_exe.bat
 ```
-*Output binary will be located in:* `dist\WindowsOptimizer.exe`
+*The compiled executable will be generated at:* `dist\WindowsOptimizer.exe`
 
-#### 3. High-Precision 0.5ms Timer Tool
-Lock your Windows system timer resolution to **`0.5000 ms`** (500 microseconds) to eliminate timer jitter and micro-stuttering:
+#### 3. Emergency Touchpad Recovery
+If a laptop touchpad ever requires state re-initialization:
 ```bat
-python timer_res.py
-```
-
-#### 4. Automated PowerShell CLI Runner
-Execute all 21 tweaks in batch mode with a color-coded status summary:
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\apply_all_tweaks.ps1
+restore_touchpad.bat
 ```
 
 ---
@@ -79,9 +61,9 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 | **🖊️ Tablet & Pen** | **1:1 Raw Linear Curve** | Zeroes polynomial `SmoothMouseXCurve` and `SmoothMouseYCurve` in registry for absolute linear 1:1 hardware pointer mapping without acceleration. |
 | **🖊️ Tablet & Pen** | **Laptop Touchpad Protection** | Enforces `LeaveOnWithMouse = 1` and `Enabled = 1` in `PrecisionTouchPad`, ensuring the laptop touchpad remains fully active when mice/tablets are plugged in. |
 | **🖊️ Tablet & Pen** | **USB Power Plan Management** | Disables `USB Selective Suspend` across active power schemes (`ACSettingIndex = 0`) to guarantee continuous 1000Hz polling without sleeping. |
-| **⚡ System & FPS** | **Invariant TSC Hardware Timers** | Configures `bcdedit /set disabledynamictick yes` and `useplatformclock no` to eliminate synthetic tick overhead and use hardware invariant TSC. |
+| **⚡ System & FPS** | **Invariant TSC Timers & 0.5ms** | Configures `bcdedit /set disabledynamictick yes` / `useplatformclock no` and locks system timer to 0.500 ms (500 µs) via `ntdll.NtSetTimerResolution`. |
 | **⚡ System & FPS** | **3:1 Gaming CPU Quantum (0x26)** | Sets `Win32PrioritySeparation = 38` (0x26) for fixed, short CPU time-slice execution dedicated to the foreground game window. |
-| **⚡ System & FPS** | **CSRSS & DWM High Priority** | Sets `CpuPriorityClass = 3` and `IoPriority = 3` in `Image File Execution Options` for `csrss.exe` and `dwm.exe` to expedite input event delivery. |
+| **⚡ System & FPS** | **CSRSS, DWM & OTD High Priority** | Sets `CpuPriorityClass = 3` and `IoPriority = 3` in `Image File Execution Options` for `csrss.exe`, `dwm.exe`, and `OpenTabletDriver.Daemon.exe`. |
 | **⚡ System & FPS** | **Game Mode & Disable GameDVR** | Enables Windows Game Mode while completely terminating `GameBarPresenceWriter.exe` and background GameDVR video capture services. |
 | **⚡ System & FPS** | **Keyboard Repeat Delay & Rate** | Sets `KeyboardDelay = 0`, `KeyboardSpeed = 31`, and zeroes `BounceTime` to eliminate debounce delay for rapid osu! key tapping. |
 | **⚡ System & FPS** | **CPU Core Unparking (100%)** | Configures `CPMINCORES = 100%` in the active power scheme to prevent sleeping CPU cores from causing micro-wake latency spikes. |
@@ -106,7 +88,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
    * Result: **0 ms hardware raw input latency (1000Hz)**.
 2. **High Priority for OTD Daemon**:
    * `OpenTabletDriver.Daemon.exe` is configured with `High` process priority to guarantee real-time packet parsing under heavy CPU load.
-3. **Windows Pointer Precision**:
+3. **Windows Pointer Precision (1:1)**:
    * Ensure Windows pointer speed is set to **`10` (6/11 notch)** with acceleration disabled to ensure exact 1:1 hardware pixel mapping without fractional interpolation.
 
 ---
@@ -124,58 +106,41 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 <a name="-русский"></a>
 ## 🇷🇺 Русский
 
-Полнофункциональный, модульный и безопасный комплекс оптимизации Windows 10/11 для полного устранения задержек ввода (Input Lag), настройки графических планшетов (**XP-Pen Deco 640 / OpenTabletDriver / Wacom / Huion / Gaomon**), системных таймеров, сетевых протоколов и фоновых служб — с сохранением штатной работы тачпадов ноутбуков (Synaptics / ELAN / Precision Touchpads).
+Современный, автономный и безопасный комплекс оптимизации Windows 10/11 для полного устранения задержек ввода (Input Lag), настройки графических планшетов (**XP-Pen Deco 640 / OpenTabletDriver / Wacom / Huion / Gaomon**), системных таймеров (0.5 мс), сетевых протоколов и фоновых служб — с сохранением штатной работы тачпадов ноутбуков (Synaptics / ELAN / Precision Touchpads).
 
 ---
 
-### ✨ Архитектура проекта и модули
+### ✨ Чистая архитектура и файлы проекта
 
 ```text
-├── optimizer.py                       # 🐍 Нативное GUI-приложение на чистом Python 3 (Dark Theme, без pip-зависимостей)
-├── build_exe.bat                      # 📦 Сборщик в автономный .exe через PyInstaller (dist\WindowsOptimizer.exe)
-├── run_python_gui.bat                 # 🚀 Быстрый запуск Python GUI
-├── timer_res.py                       # ⏱️ Утилита фиксации системного таймера Windows на 0.500 мс (500 мкс)
-├── fix_touchpad.bat                   # 🩹 Быстрое восстановление тачпада и служб HP
-├── restore_all_touchpad.bat           # 🛡️ Полный аварийный сброс и перезапуск подсистемы ввода и тачпада
-├── launch_gui.bat                     # 📜 Лаунчер устаревшего PowerShell WPF GUI (Авто-UAC)
-├── optimizer_gui.ps1                  # 📜 Интерфейс PowerShell WPF GUI
-├── apply_all_tweaks.ps1               # ⚡ Консольный мастер-скрипт (применение всех твиков в 1 клик)
-├── scripts/
-│   ├── 01_tablet_pen_latency.ps1      # 🖊️ Задержка пера, 1:1 Raw Curve, политики TabletPC и защита тачпада
-│   ├── 02_gaming_system_latency.ps1   # ⚡ Аппаратные таймеры TSC, кванты CPU 0x26, CSRSS/DWM, Game Mode
-│   ├── 03_network_ping_tweaks.ps1     # 🌐 Сетевые твики (TCPNoDelay, TcpAckFrequency, 0% QoS лимитов)
-│   └── 04_debloat_services_tasks.ps1  # 🧹 DiagTrack, SysMain, OEM-службы, задачи Compatibility, SSD LastAccess
-└── README.md                          # 📖 Двуязычная документация
+windows-optimizer-osu/
+├── optimizer.py             # 🐍 Нативное GUI-приложение на чистом Python 3 (Dark Theme, без pip-зависимостей, таймер 0.5мс)
+├── run.bat                  # 🚀 Быстрый запуск программы в 1 клик
+├── build_exe.bat            # 📦 1-клик сборщик в автономный .exe (dist\WindowsOptimizer.exe)
+├── restore_touchpad.bat     # 🛡️ Аварийный инструмент восстановления тачпада и служб (Авто-UAC)
+├── .gitignore               # ⚙️ Правила исключений Git
+└── README.md                # 📖 Двуязычная документация
 ```
 
 ---
 
 ### 🚀 Быстрый старт
 
-#### 1. Графическое приложение Python (Рекомендуется)
-Запустите лаунчер (не требует установки сторонних pip-библиотек):
-```bat
-run_python_gui.bat
-```
-*или напрямую:* `python optimizer.py`
+#### 1. Быстрый запуск Python GUI (Рекомендуется)
+Дважды кликните по **`run.bat`** (или выполните `python optimizer.py`).
+> **Примечание:** Требуется Python 3.8+. Используется только стандартная библиотека (**установка сторонних pip-пакетов не требуется**).
 
 #### 2. Сборка в один автономный `.exe` файл
 Скомпилируйте `optimizer.py` в готовый исполняемый файл с автоматическим запросом прав Администратора:
 ```bat
 build_exe.bat
 ```
-*Готовый файл появится в папке:* `dist\WindowsOptimizer.exe`
+*Скомпилированный файл будет создан в папке:* `dist\WindowsOptimizer.exe`
 
-#### 3. Фиксация системного таймера на 0.5 мс
-Запустите утилиту для перевода таймера Windows в режим сверхвысокой точности **`0.5000 мс`** (устраняет микрофризы и дрожание кадров):
+#### 3. Аварийное восстановление тачпада
+Если требуется сбросить политики ввода и перезапустить драйвер тачпада:
 ```bat
-python timer_res.py
-```
-
-#### 4. Консольный скрипт PowerShell
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\apply_all_tweaks.ps1
+restore_touchpad.bat
 ```
 
 ---
@@ -189,9 +154,9 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 | **🖊️ Планшет и Перо** | **1:1 Raw Linear Curve** | Обнуляет полиномиальные кривые `SmoothMouseXCurve`/`YCurve` для абсолютно линейного движения курсора без акселерации. |
 | **🖊️ Планшет и Перо** | **Защита тачпада ноутбука** | Выставляет `LeaveOnWithMouse = 1` и `Enabled = 1`, предотвращая отключение тачпада при подключении мыши/планшета. |
 | **🖊️ Планшет и Перо** | **Энергосбережение USB** | Отключает `USB Selective Suspend` в активной схеме питания (`ACSettingIndex = 0`) для стабильного опроса 1000 Hz. |
-| **⚡ Система и FPS** | **Аппаратный таймер TSC** | `bcdedit /set disabledynamictick yes` и `useplatformclock no` переводят ОС на аппаратный инвариантный таймер процессора. |
+| **⚡ Система и FPS** | **Аппаратный таймер TSC и 0.5 мс** | `bcdedit /set disabledynamictick yes` и фиксация таймера Windows на 0.500 мс (500 мкс) через `NtSetTimerResolution`. |
 | **⚡ Система и FPS** | **Кванты CPU 3:1 (0x26)** | `Win32PrioritySeparation = 38` (0x26) выделяет активной игре в 3 раза больше времени процессора без прерываний на фон. |
-| **⚡ Система и FPS** | **Приоритеты CSRSS и DWM (High)** | Выставляет `CpuPriorityClass = 3` и `IoPriority = 3` для мгновенной доставки аппаратных кликов и вывода кадров. |
+| **⚡ Система и FPS** | **Приоритеты CSRSS, DWM и OTD** | Выставляет `CpuPriorityClass = 3` и `IoPriority = 3` для `csrss.exe`, `dwm.exe` и `OpenTabletDriver.Daemon.exe`. |
 | **⚡ Система и FPS** | **Game Mode и отключение GameDVR** | Включает игровой режим Windows и полностью выключает фоновый процесс `GameBarPresenceWriter.exe`. |
 | **⚡ Система и FPS** | **Задержка повтора клавиатуры** | `KeyboardDelay = 0`, `KeyboardSpeed = 31`, `BounceTime = 0` для максимальной скорости регистрации стримов K1/K2 в osu!. |
 | **⚡ Система и FPS** | **CPU Core Unparking (100%)** | `CPMINCORES = 100%` запрещает процессору усыплять логические ядра, исключая задержку 2–5 мс при их пробуждении. |
